@@ -3,8 +3,9 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
-import { getModels, findModel } from "./models.js";
+import { getModels, findModel, validateModelSize } from "./models.js";
 import { generateImage, getImageTask } from "./router.js";
+import type { ProviderId } from "./types.js";
 import { generateSchema } from "./validation.js";
 import { ProviderHttpError } from "./utils/http.js";
 
@@ -34,6 +35,9 @@ app.post("/api/images/generate", async (request, response) => {
     if (!model) {
       return response.status(400).json({ error: { code: "MODEL_NOT_FOUND", message: "模型不存在或尚未注册" } });
     }
+    if (model.provider !== input.provider) {
+      return response.status(400).json({ error: { code: "MODEL_PROVIDER_MISMATCH", message: "模型与 API 服务商不匹配" } });
+    }
     if (!model.configured) {
       return response.status(400).json({ error: { code: "PROVIDER_NOT_CONFIGURED", message: `${model.providerName} 尚未配置 API Key` } });
     }
@@ -42,6 +46,11 @@ app.post("/api/images/generate", async (request, response) => {
     }
     if (input.count > model.maxOutputImages) {
       return response.status(400).json({ error: { code: "TOO_MANY_OUTPUTS", message: `该模型单次最多生成 ${model.maxOutputImages} 张图片` } });
+    }
+
+    const sizeError = validateModelSize(model, input.size);
+    if (sizeError) {
+      return response.status(400).json({ error: { code: "INVALID_SIZE", message: sizeError } });
     }
 
     const result = await generateImage(input);
@@ -75,16 +84,16 @@ app.get("/api/images/tasks/:provider/:taskId", async (request, response) => {
     const provider = request.params.provider;
     const taskId = request.params.taskId;
     const model = typeof request.query.model === "string" ? request.query.model : undefined;
-    const validProviders = new Set(["lingke"]);
+    const validProviders = new Set<ProviderId>(["lingke"]);
 
-    if (!provider || !validProviders.has(provider)) {
-      return response.status(400).json({ error: { code: "INVALID_PROVIDER", message: "任务厂商不正确" } });
+    if (!provider || !validProviders.has(provider as ProviderId)) {
+      return response.status(400).json({ error: { code: "INVALID_PROVIDER", message: "该厂商不支持异步任务查询" } });
     }
     if (!taskId) {
       return response.status(400).json({ error: { code: "INVALID_TASK_ID", message: "缺少 task_id" } });
     }
 
-    const result = await getImageTask(taskId, model);
+    const result = await getImageTask(provider as ProviderId, taskId, model);
     return response.json({ success: true, result });
   } catch (error) {
     if (error instanceof ProviderHttpError) {

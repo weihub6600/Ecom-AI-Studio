@@ -77,7 +77,7 @@ export class LingkeAdapter implements ImageProviderAdapter {
           size: request.size,
           images: request.images.length > 0 ? request.images.map((image) => image.dataUrl) : undefined,
           n: request.count,
-          quality: request.quality,
+          quality: "high",
           resolution: "1K",
           response_format: "url"
         }

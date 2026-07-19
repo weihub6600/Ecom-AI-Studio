@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import type { GeneratedImage, GenerationResult, ImageQuality, ModelCapability, OutputSize, UploadImage } from "./types";
+import type { GeneratedImage, GenerationResult, ModelCapability, OutputSize, ProviderId, UploadImage } from "./types";
 
 const promptTemplates = [
   "为上传的商品生成高级简约电商主图，浅色摄影棚背景，柔和自然投影，保持商品外观、包装文字、Logo、颜色和结构完全不变，主体居中，商业产品摄影，高级质感。",
@@ -9,22 +9,13 @@ const promptTemplates = [
   "生成纯白背景商品效果图，修正光线和阴影，去除杂乱背景，不改变商品本体、形状、文字和Logo，适合电商平台白底主图。"
 ];
 
-const sizeOptions: Array<{ value: OutputSize; title: string }> = [
-  { value: "auto", title: "自适应" },
-  { value: "1024x1024", title: "正方形 1:1" },
-  { value: "1024x1536", title: "竖版 2:3" },
-  { value: "1536x1024", title: "横版 3:2" },
-  { value: "960x1280", title: "竖版 3:4" },
-  { value: "1280x960", title: "横版 4:3" }
-];
-
 const models = ref<ModelCapability[]>([]);
+const selectedProviderId = ref<ProviderId>("lingke");
 const selectedModelId = ref("gpt-image-2");
 const prompt = ref(promptTemplates[0] ?? "");
 const generationMode = ref<"text-to-image" | "image-edit">("text-to-image");
 const negativePrompt = ref("模糊、变形、错误文字、重复商品、裁切商品、改变Logo、改变包装结构");
 const outputSize = ref<OutputSize>("1024x1024");
-const quality = ref<ImageQuality>("auto");
 const count = ref(1);
 const seed = ref<number | undefined>(undefined);
 const uploads = ref<UploadImage[]>([]);
@@ -39,7 +30,14 @@ const errorMessage = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
 
-const selectedModel = computed(() => models.value.find((model) => model.id === selectedModelId.value) || models.value[0]);
+const providers = computed(() => {
+  const unique = new Map<ProviderId, string>();
+  for (const model of models.value) unique.set(model.provider, model.providerName);
+  return Array.from(unique, ([id, name]) => ({ id, name }));
+});
+const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
+const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
+const sizeOptions = computed(() => (selectedModel.value?.sizes || []).map((value) => ({ value, title: formatSizeTitle(value) })));
 const canGenerate = computed(() => Boolean(
   selectedModel.value?.configured &&
   prompt.value.trim().length >= 2 &&
@@ -47,12 +45,20 @@ const canGenerate = computed(() => Boolean(
   (generationMode.value === "text-to-image" || uploads.value.length > 0)
 ));
 const operationLabel = computed(() => generationMode.value === "image-edit" ? "参考图生成" : "文字生成图片");
-const selectedSizeLabel = computed(() => sizeOptions.find((item) => item.value === outputSize.value)?.title || outputSize.value);
+const selectedSizeLabel = computed(() => formatSizeTitle(outputSize.value));
+const providerSymbol = computed(() => selectedProviderId.value === "grsai" ? "G" : "百");
+
+watch(selectedProviderId, () => {
+  const firstModel = availableModels.value[0];
+  if (!firstModel) return;
+  if (!availableModels.value.some((model) => model.id === selectedModelId.value)) {
+    selectedModelId.value = firstModel.id;
+  }
+});
 
 watch(selectedModel, (model) => {
   if (!model) return;
   if (!model.sizes.includes(outputSize.value)) outputSize.value = model.sizes[0] || "auto";
-  if (!model.qualities.includes(quality.value)) quality.value = model.qualities[0] || "auto";
   count.value = Math.min(count.value, model.maxOutputImages);
   if (uploads.value.length > model.maxReferenceImages) uploads.value = uploads.value.slice(0, model.maxReferenceImages);
   if (!model.supportsSeed) seed.value = undefined;
@@ -83,12 +89,31 @@ async function loadModels() {
     if (!response.ok) throw new Error("无法读取模型列表");
     const data = await response.json();
     models.value = data.models || [];
-    selectedModelId.value = models.value[0]?.id || "gpt-image-2";
+    const firstLingke = models.value.find((model) => model.provider === "lingke");
+    const firstModel = firstLingke || models.value[0];
+    if (firstModel) {
+      selectedProviderId.value = firstModel.provider;
+      selectedModelId.value = firstModel.id;
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "服务端未启动";
   } finally {
     modelLoading.value = false;
   }
+}
+
+function formatSizeTitle(value: OutputSize): string {
+  if (value === "auto") return "自适应";
+  const separator = value.includes("x") ? "x" : value.includes(":") ? ":" : "";
+  if (!separator) return value;
+  const [rawWidth, rawHeight] = value.split(separator);
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return value;
+  const divisor = greatestCommonDivisor(width, height);
+  const ratio = `${width / divisor}:${height / divisor}`;
+  const orientation = width === height ? "正方形" : width > height ? "横版" : "竖版";
+  return `${orientation} ${ratio}`;
 }
 
 function openFileDialog() {
@@ -178,7 +203,6 @@ async function generate() {
           ? uploads.value.map(({ name, mimeType, dataUrl }) => ({ name, mimeType, dataUrl }))
           : [],
         size: outputSize.value,
-        quality: quality.value,
         count: count.value,
         seed: selectedModel.value.supportsSeed ? seed.value : undefined
       })
@@ -298,7 +322,7 @@ function formatBytes(bytes: number) {
       </a>
       <div class="topbar-center">
         <span class="live-dot"></span>
-        百嘉瑞AI 电商视觉工作台
+        BJR AI 双引擎电商视觉工作台
       </div>
       <div class="topbar-actions">
         <span class="mode-badge">BJR 0.1</span>
@@ -311,12 +335,12 @@ function formatBytes(bytes: number) {
         <div>
           <span class="eyebrow">ECOMMERCE CREATIVE ENGINE</span>
           <h1>一张商品图，生成完整商业视觉</h1>
-          <p>基于百嘉瑞AI GPT Image 2。支持文生图与参考图生成。生成方式清晰分离，输出尺寸直接对应接口 size 参数。</p>
+          <p>支持百嘉瑞AI 与 GRSAI 双 API，可在 GPT Image 2 和 GPT Image 2 VIP 之间切换。</p>
         </div>
         <div class="intro-stats">
-          <div><strong>GPT Image 2</strong><span>当前模型</span></div>
-          <div><strong>{{ selectedModel?.configured ? '已连接' : '待配置' }}</strong><span>百嘉瑞AI</span></div>
-          <div><strong>6 档</strong><span>输出尺寸</span></div>
+          <div><strong>{{ selectedModel?.name || '—' }}</strong><span>当前模型</span></div>
+          <div><strong>{{ selectedModel?.configured ? '已连接' : '待配置' }}</strong><span>{{ selectedModel?.providerName || 'API' }}</span></div>
+          <div><strong>{{ selectedModel?.sizes.length || 0 }} 档</strong><span>输出尺寸</span></div>
         </div>
       </section>
 
@@ -331,21 +355,41 @@ function formatBytes(bytes: number) {
           <div class="panel-heading">
             <div>
               <span class="step-number">01</span>
-              <div><h2>创作设置</h2><p>配置百嘉瑞AI 并描述需要生成的画面</p></div>
+              <div><h2>创作设置</h2><p>选择 API 服务商、模型并描述需要生成的画面</p></div>
             </div>
             <span class="operation-pill">{{ operationLabel }}</span>
           </div>
 
           <div class="field-block">
-            <label>AI 模型</label>
-            <div v-if="modelLoading" class="skeleton-input"></div>
-            <div v-else-if="selectedModel" class="model-card" :class="{ disabled: !selectedModel.configured }">
-              <div class="provider-symbol">百</div>
-              <div class="model-copy"><strong>{{ selectedModel.providerName }} · {{ selectedModel.name }}</strong><span>{{ selectedModel.description }}</span></div>
-              <span class="status-tag" :class="selectedModel.configured ? 'ready' : 'offline'">
-                {{ selectedModel.configured ? '可用' : '需配置 Key' }}
-              </span>
+            <label>API 服务商</label>
+            <div class="segmented">
+              <button
+                v-for="provider in providers"
+                :key="provider.id"
+                type="button"
+                :class="{ active: selectedProviderId === provider.id }"
+                @click="selectedProviderId = provider.id"
+              >
+                {{ provider.name }}
+              </button>
             </div>
+          </div>
+
+          <div class="field-block">
+            <label for="model-select">AI 模型</label>
+            <div v-if="modelLoading" class="skeleton-input"></div>
+            <template v-else-if="selectedModel">
+              <select v-if="availableModels.length > 1" id="model-select" v-model="selectedModelId" class="select-control">
+                <option v-for="model in availableModels" :key="model.id" :value="model.id">{{ model.name }}</option>
+              </select>
+              <div class="model-card" :class="{ disabled: !selectedModel.configured }">
+                <div class="provider-symbol">{{ providerSymbol }}</div>
+                <div class="model-copy"><strong>{{ selectedModel.providerName }} · {{ selectedModel.name }}</strong><span>{{ selectedModel.description }}</span></div>
+                <span class="status-tag" :class="selectedModel.configured ? 'ready' : 'offline'">
+                  {{ selectedModel.configured ? '可用' : '需配置 Key' }}
+                </span>
+              </div>
+            </template>
           </div>
 
           <div class="field-block">
@@ -411,7 +455,7 @@ function formatBytes(bytes: number) {
             <input id="negative-prompt" v-model="negativePrompt" type="text" placeholder="不希望出现的内容" />
           </div>
 
-          <div class="settings-grid">
+          <div class="settings-grid" style="grid-template-columns: 1fr;">
             <div class="field-block size-block">
               <div class="label-row">
                 <label>输出尺寸</label>
@@ -419,7 +463,7 @@ function formatBytes(bytes: number) {
               </div>
               <div class="size-grid">
                 <button
-                  v-for="option in sizeOptions.filter((item) => selectedModel?.sizes.includes(item.value))"
+                  v-for="option in sizeOptions"
                   :key="option.value"
                   type="button"
                   class="size-card"
@@ -433,15 +477,7 @@ function formatBytes(bytes: number) {
               </div>
             </div>
 
-            <div class="field-block">
-              <label>生成质量</label>
-              <div class="segmented">
-                <button v-for="item in selectedModel?.qualities || []" :key="item" type="button" :class="{ active: quality === item }" @click="quality = item">
-                  {{ item === 'auto' ? '自动' : item === 'high' ? '高' : item === 'medium' ? '中' : '低' }}
-                </button>
-              </div>
-            </div>
-          </div>
+                      </div>
 
           <div class="settings-grid small-settings">
             <div class="field-block">
@@ -501,16 +537,16 @@ function formatBytes(bytes: number) {
               <div class="floating-card card-two">智能布光</div>
             </div>
             <strong>你的商品视觉将在这里呈现</strong>
-            <p>左侧上传商品图并填写画面描述，百嘉瑞AI 将异步生成并自动返回最终结果。</p>
+            <p>左侧选择 API 服务商、上传商品图并填写画面描述，系统将自动返回最终结果。</p>
             <div class="empty-features">
-              <span>✓ 异步任务</span><span>✓ 文生图</span><span>✓ 高清下载</span>
+              <span>✓ 双 API</span><span>✓ 文生图</span><span>✓ 高清下载</span>
             </div>
           </div>
 
           <div class="model-summary">
             <div><span>当前厂商</span><strong>{{ selectedModel?.providerName || '—' }}</strong></div>
             <div><span>生成方式</span><strong>{{ generationMode === 'image-edit' ? '参考图生成' : '文生图' }}</strong></div>
-            <div><span>输出规格</span><strong>{{ selectedSizeLabel }} · {{ quality === 'auto' ? '自动' : quality === 'high' ? '高质量' : quality === 'medium' ? '中质量' : '低质量' }}</strong></div>
+            <div><span>输出规格</span><strong>{{ selectedSizeLabel }}</strong></div>
           </div>
         </section>
       </div>

@@ -1,6 +1,6 @@
-export type ProviderId = "lingke";
+export type ProviderId = "lingke" | "grsai";
 export type ImageOperation = "text-to-image" | "image-edit";
-export type OutputSize = "auto" | "1024x1024" | "1024x1536" | "1536x1024" | "960x1280" | "1280x960";
+export type OutputSize = string;
 export type ImageQuality = "auto" | "high" | "medium" | "low";
 export type GenerationStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -18,7 +18,7 @@ export interface GenerateImageRequest {
   negativePrompt?: string;
   images: InputImage[];
   size: OutputSize;
-  quality: ImageQuality;
+  quality?: ImageQuality;
   count: number;
   seed?: number;
 }

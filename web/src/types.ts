@@ -1,5 +1,5 @@
-export type ProviderId = "lingke";
-export type OutputSize = "auto" | "1024x1024" | "1024x1536" | "1536x1024" | "960x1280" | "1280x960";
+export type ProviderId = "lingke" | "grsai";
+export type OutputSize = string;
 export type ImageQuality = "auto" | "high" | "medium" | "low";
 export type GenerationStatus = "pending" | "processing" | "completed" | "failed";
 
