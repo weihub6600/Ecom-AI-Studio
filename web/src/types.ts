@@ -1,4 +1,4 @@
-export type ProviderId = "lingke" | "grsai";
+export type ProviderId = "lingke" | "grsai" | "nanobanana";
 export type OutputSize = string;
 export type ImageQuality = "auto" | "high" | "medium" | "low";
 export type GenerationStatus = "pending" | "processing" | "completed" | "failed";

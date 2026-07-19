@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { getModels, findModel, validateModelSize } from "./models.js";
+import { createHistoryService, HistoryValidationError, parseHistorySaveInput } from "./history.js";
 import { generateImage, getImageTask } from "./router.js";
 import type { ProviderId } from "./types.js";
 import { generateSchema } from "./validation.js";
@@ -15,9 +16,18 @@ dotenv.config({ path: path.resolve(currentDir, "../../.env") });
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
+const projectRoot = path.resolve(currentDir, "../..");
+const historyService = createHistoryService({
+  dataDir: path.resolve(projectRoot, process.env.IMAGE_STORAGE_DIR || "data"),
+  maxRecords: Number(process.env.IMAGE_HISTORY_LIMIT || 100),
+  maxImageBytes: Number(process.env.IMAGE_MAX_DOWNLOAD_BYTES || 41_943_040),
+  downloadTimeoutMs: Number(process.env.IMAGE_DOWNLOAD_TIMEOUT_MS || 120_000)
+});
+await historyService.initialize();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "120mb" }));
+app.use("/generated", express.static(historyService.generatedDir, { dotfiles: "deny", fallthrough: false, maxAge: "30d" }));
 
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true, service: "ecom-ai-studio-api", time: new Date().toISOString() });
@@ -25,6 +35,54 @@ app.get("/api/health", (_request, response) => {
 
 app.get("/api/models", (_request, response) => {
   response.json({ models: getModels() });
+});
+
+app.get("/api/history", async (request, response) => {
+  try {
+    const limit = typeof request.query.limit === "string" ? Number(request.query.limit) : 20;
+    const history = await historyService.list(limit);
+    return response.json({ history });
+  } catch (error) {
+    console.error("History list error", error);
+    return response.status(500).json({ error: { code: "HISTORY_LIST_ERROR", message: "读取服务器生成历史失败" } });
+  }
+});
+
+app.post("/api/history", async (request, response) => {
+  try {
+    const input = parseHistorySaveInput(request.body);
+    const record = await historyService.save(input);
+    return response.status(201).json({ success: true, record });
+  } catch (error) {
+    if (error instanceof HistoryValidationError) {
+      return response.status(400).json({ error: { code: "INVALID_HISTORY_REQUEST", message: error.message } });
+    }
+    console.error("History save error", error);
+    return response.status(502).json({
+      error: { code: "HISTORY_SAVE_ERROR", message: error instanceof Error ? error.message : "图片保存到服务器失败" }
+    });
+  }
+});
+
+app.delete("/api/history/:id", async (request, response) => {
+  try {
+    const removed = await historyService.remove(request.params.id);
+    if (!removed) return response.status(404).json({ error: { code: "HISTORY_NOT_FOUND", message: "历史记录不存在" } });
+    return response.json({ success: true });
+  } catch (error) {
+    console.error("History delete error", error);
+    return response.status(500).json({ error: { code: "HISTORY_DELETE_ERROR", message: "删除服务器历史失败" } });
+  }
+});
+
+app.delete("/api/history", async (_request, response) => {
+  try {
+    await historyService.clear();
+    return response.json({ success: true });
+  } catch (error) {
+    console.error("History clear error", error);
+    return response.status(500).json({ error: { code: "HISTORY_CLEAR_ERROR", message: "清空服务器历史失败" } });
+  }
 });
 
 app.post("/api/images/generate", async (request, response) => {
@@ -122,4 +180,5 @@ app.get("/{*path}", (request, response, next) => {
 
 app.listen(port, () => {
   console.log(`Ecom AI Studio API: http://localhost:${port}`);
+  console.log(`Generated images: ${historyService.generatedDir}`);
 });

@@ -1,4 +1,4 @@
-export type ProviderId = "lingke" | "grsai";
+export type ProviderId = "lingke" | "grsai" | "nanobanana";
 export type ImageOperation = "text-to-image" | "image-edit";
 export type OutputSize = string;
 export type ImageQuality = "auto" | "high" | "medium" | "low";

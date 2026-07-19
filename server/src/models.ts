@@ -29,12 +29,27 @@ const grsaiVipSizes: ModelCapability["sizes"] = [
   "1152x864"
 ];
 
+// Nano Banana 使用与百嘉瑞AI一致的 5 种常用比例，并统一请求 4K。
+// 像素值用于前端展示；实际请求会转换为 aspectRatio + imageSize=4K。
+const nanoBanana4kSizes: ModelCapability["sizes"] = [
+  "auto",
+  "4096x4096",
+  "2720x4080",
+  "4080x2720",
+  "3072x4096",
+  "4096x3072"
+];
+
 function lingkeConfigured(): boolean {
   return Boolean(process.env.LINGKE_API_KEY);
 }
 
 function grsaiConfigured(): boolean {
   return Boolean(process.env.GRSAI_API_KEY);
+}
+
+function nanoBananaConfigured(): boolean {
+  return Boolean(process.env.NANO_BANANA_API_KEY || process.env.GRSAI_API_KEY);
 }
 
 export function getModels(): ModelCapability[] {
@@ -83,6 +98,38 @@ export function getModels(): ModelCapability[] {
       supportsNegativePrompt: false,
       supportsSeed: false,
       sizes: grsaiVipSizes,
+      qualities: [],
+      maxOutputImages: 1,
+      asynchronous: false
+    },
+    {
+      id: "nanobanana-nano-banana-pro",
+      provider: "nanobanana",
+      providerName: "Nano Banana",
+      name: "Nano Banana Pro",
+      description: "Nano Banana Pro 4K 图像生成模型，支持文生图与商品参考图生成",
+      configured: nanoBananaConfigured(),
+      supportsReferenceImages: true,
+      maxReferenceImages: 4,
+      supportsNegativePrompt: false,
+      supportsSeed: false,
+      sizes: nanoBanana4kSizes,
+      qualities: [],
+      maxOutputImages: 1,
+      asynchronous: false
+    },
+    {
+      id: "nanobanana-nano-banana-2",
+      provider: "nanobanana",
+      providerName: "Nano Banana",
+      name: "Nano Banana 2",
+      description: "Nano Banana 2 4K 图像生成模型，支持文生图与商品参考图生成",
+      configured: nanoBananaConfigured(),
+      supportsReferenceImages: true,
+      maxReferenceImages: 4,
+      supportsNegativePrompt: false,
+      supportsSeed: false,
+      sizes: nanoBanana4kSizes,
       qualities: [],
       maxOutputImages: 1,
       asynchronous: false

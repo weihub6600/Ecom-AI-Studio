@@ -8,3 +8,7 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+data/
+.server-history-backup-*/
+.history-backup-*/
+Ecom-AI-Studio-server-history-patch-*/

@@ -6,10 +6,12 @@ import type {
 } from "./types.js";
 import { LingkeAdapter } from "./providers/lingke.js";
 import { GrsaiAdapter } from "./providers/grsai.js";
+import { NanobananaAdapter } from "./providers/nanobanana.js";
 
 const adapters = new Map<ProviderId, ImageProviderAdapter>([
   ["lingke", new LingkeAdapter()],
-  ["grsai", new GrsaiAdapter()]
+  ["grsai", new GrsaiAdapter()],
+  ["nanobanana", new NanobananaAdapter()]
 ]);
 
 function getAdapter(provider: ProviderId): ImageProviderAdapter {

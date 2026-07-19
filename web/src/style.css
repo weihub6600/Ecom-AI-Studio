@@ -232,7 +232,7 @@ textarea { resize: vertical; min-height: 128px; padding: 13px 14px; line-height:
 .size-copy small { margin-top: 2px; font-size: 8px; font-weight: 800; color: #6a5bd2; letter-spacing: .03em; }
 .size-check { opacity: 0; width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; background: #6a5bd2; color: #fff; font-size: 9px; }
 .size-card.active .size-check { opacity: 1; }
-.segmented { display: grid; grid-template-columns: repeat(4,1fr); padding: 3px; background: #f1f2f6; border-radius: 10px; }
+.segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; background: #f1f2f6; border-radius: 10px; }
 .segmented button { min-height: 43px; border: 0; background: transparent; color: #858797; border-radius: 8px; font-size: 10px; font-weight: 700; }
 .segmented button.active { background: #fff; color: #5d4fc6; box-shadow: 0 3px 10px rgba(46,47,75,.09); }
 .generate-button { width: 100%; min-height: 50px; border: 0; border-radius: 13px; background: linear-gradient(100deg,#695ae0,#8170f3 60%,#6655dc); color: white; box-shadow: 0 12px 25px rgba(91,75,205,.24); font-weight: 780; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 9px; transition: .2s ease; }
@@ -308,3 +308,38 @@ textarea { resize: vertical; min-height: 128px; padding: 13px 14px; line-height:
 @media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } .small-settings { grid-template-columns: 1fr; } .size-grid { grid-template-columns: 1fr; } }
 
 @media (max-width: 620px) { .mode-selector { grid-template-columns: 1fr; } .size-grid { grid-template-columns: 1fr; } }
+
+
+/* 服务器生成历史 */
+.history-panel { margin-top: 22px; padding: 25px; }
+.history-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 20px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+.history-heading > div { display: flex; align-items: center; gap: 12px; }
+.history-heading h2 { margin: 0; font-size: 16px; }
+.history-heading p { margin: 4px 0 0; color: #9698a8; font-size: 11px; }
+.history-clear { border: 1px solid #ead8dc; background: #fff8f9; color: #a55765; border-radius: 9px; padding: 8px 12px; font-size: 10px; font-weight: 750; }
+.history-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.history-card { display: grid; grid-template-columns: 116px minmax(0, 1fr) auto; align-items: center; gap: 13px; min-width: 0; padding: 10px; border: 1px solid #e7e8ef; border-radius: 14px; background: #fbfbfd; transition: .18s ease; }
+.history-card:hover { border-color: #c9c2ef; background: #fff; transform: translateY(-1px); box-shadow: 0 9px 22px rgba(58, 53, 104, .07); }
+.history-card.active { border-color: #7c6ce0; box-shadow: inset 0 0 0 1px rgba(124, 108, 224, .2); }
+.history-thumb { position: relative; width: 116px; height: 86px; padding: 0; overflow: hidden; border: 0; border-radius: 10px; background: #eff0f5; }
+.history-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.history-thumb span { position: absolute; right: 6px; bottom: 6px; padding: 4px 6px; border-radius: 6px; background: rgba(31, 30, 48, .74); color: #fff; font-size: 9px; font-weight: 750; }
+.history-copy { min-width: 0; }
+.history-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.history-meta strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.history-meta span { flex: 0 0 auto; color: #9b9daa; font-size: 9px; }
+.history-copy p { display: -webkit-box; margin: 8px 0 6px; overflow: hidden; color: #646679; font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.history-copy small { color: #8e90a0; font-size: 9px; }
+.history-actions { display: flex; flex-direction: column; gap: 7px; }
+.history-actions button { min-width: 54px; border: 1px solid #dedfe7; border-radius: 8px; background: #fff; color: #5d4fc6; padding: 7px 9px; font-size: 9px; font-weight: 750; }
+.history-actions button.danger { color: #a34f5d; border-color: #ead9dc; }
+.history-empty { display: grid; min-height: 120px; place-items: center; color: #9698a8; font-size: 12px; border: 1px dashed #dedfe8; border-radius: 13px; background: #fafafd; }
+@media (max-width: 1000px) { .history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .history-card { grid-template-columns: 88px minmax(0, 1fr); } .history-thumb { width: 88px; height: 76px; } .history-actions { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; } .history-meta { align-items: flex-start; flex-direction: column; gap: 3px; } }
+
+
+/* Nano Banana 4K 常用比例预览 */
+.size-preview[data-size="2720x4080"] i { width: 16px; height: 25px; }
+.size-preview[data-size="4080x2720"] i { width: 27px; height: 18px; }
+.size-preview[data-size="3072x4096"] i { width: 18px; height: 24px; }
+.size-preview[data-size="4096x3072"] i { width: 26px; height: 19px; }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { GeneratedImage, GenerationResult, ModelCapability, OutputSize, ProviderId, UploadImage } from "./types";
 
 const promptTemplates = [
@@ -8,6 +8,20 @@ const promptTemplates = [
   "生成日式生活方式场景，原木桌面、自然窗光和浅色背景，商品作为视觉中心，构图留白，保持商品标签和包装不变。",
   "生成纯白背景商品效果图，修正光线和阴影，去除杂乱背景，不改变商品本体、形状、文字和Logo，适合电商平台白底主图。"
 ];
+
+interface ServerHistoryRecord {
+  id: string;
+  createdAt: string;
+  provider: ProviderId;
+  providerName: string;
+  model: string;
+  prompt: string;
+  operation: "text-to-image" | "image-edit";
+  size: OutputSize;
+  durationMs?: number;
+  cost?: number;
+  images: GeneratedImage[];
+}
 
 const models = ref<ModelCapability[]>([]);
 const selectedProviderId = ref<ProviderId>("lingke");
@@ -29,6 +43,10 @@ const dragging = ref(false);
 const errorMessage = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
+const serverHistory = ref<ServerHistoryRecord[]>([]);
+const historyLoading = ref(true);
+const activeHistoryId = ref<string | null>(null);
+const restoringHistory = ref(false);
 
 const providers = computed(() => {
   const unique = new Map<ProviderId, string>();
@@ -46,7 +64,11 @@ const canGenerate = computed(() => Boolean(
 ));
 const operationLabel = computed(() => generationMode.value === "image-edit" ? "参考图生成" : "文字生成图片");
 const selectedSizeLabel = computed(() => formatSizeTitle(outputSize.value));
-const providerSymbol = computed(() => selectedProviderId.value === "grsai" ? "G" : "百");
+const providerSymbol = computed(() => {
+  if (selectedProviderId.value === "grsai") return "G";
+  if (selectedProviderId.value === "nanobanana") return "N";
+  return "百";
+});
 
 watch(selectedProviderId, () => {
   const firstModel = availableModels.value[0];
@@ -66,6 +88,7 @@ watch(selectedModel, (model) => {
 });
 
 watch(generationMode, (mode) => {
+  if (restoringHistory.value) return;
   errorMessage.value = "";
   results.value = [];
   generationMeta.value = null;
@@ -79,6 +102,7 @@ watch(generationMode, (mode) => {
 
 onMounted(async () => {
   await loadModels();
+  await loadServerHistory();
 });
 
 async function loadModels() {
@@ -100,6 +124,118 @@ async function loadModels() {
   } finally {
     modelLoading.value = false;
   }
+}
+
+async function loadServerHistory() {
+  historyLoading.value = true;
+  try {
+    const response = await fetch("/api/history?limit=50");
+    const data = await response.json() as { history?: ServerHistoryRecord[]; error?: { message?: string } };
+    if (!response.ok) throw new Error(data.error?.message || "读取服务器历史失败");
+    serverHistory.value = Array.isArray(data.history) ? data.history : [];
+    const latest = serverHistory.value[0];
+    if (latest) await restoreHistory(latest, false);
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "读取服务器历史失败";
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+async function saveGenerationToServer(meta: GenerationResult, generatedImages: GeneratedImage[]) {
+  try {
+    const response = await fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: meta.provider,
+        providerName: selectedModel.value?.providerName || meta.provider,
+        model: meta.model,
+        prompt: prompt.value.trim(),
+        operation: generationMode.value,
+        size: outputSize.value,
+        durationMs: meta.durationMs,
+        cost: meta.cost,
+        images: generatedImages
+      })
+    });
+    const data = await response.json() as { record?: ServerHistoryRecord; error?: { message?: string } };
+    if (!response.ok || !data.record) throw new Error(data.error?.message || "自动保存到服务器失败");
+
+    const record = data.record;
+    serverHistory.value = [record, ...serverHistory.value.filter((item) => item.id !== record.id)].slice(0, 50);
+    activeHistoryId.value = record.id;
+    results.value = record.images;
+    generationMeta.value = { ...meta, images: record.images };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    errorMessage.value = `图片已经生成，但自动保存到服务器失败：${message}`;
+  }
+}
+
+async function restoreHistory(record: ServerHistoryRecord, scrollToResult = true) {
+  restoringHistory.value = true;
+  const matchingModel = models.value.find((model) => model.provider === record.provider && model.id === record.model);
+  selectedProviderId.value = record.provider;
+  if (matchingModel) selectedModelId.value = matchingModel.id;
+  generationMode.value = record.operation;
+  await nextTick();
+  if (!matchingModel || matchingModel.sizes.includes(record.size)) outputSize.value = record.size;
+  prompt.value = record.prompt;
+  results.value = record.images;
+  resultDimensions.value = {};
+  generationMeta.value = {
+    provider: record.provider,
+    model: record.model,
+    images: record.images,
+    durationMs: record.durationMs || 0,
+    status: "completed",
+    cost: record.cost
+  };
+  activeHistoryId.value = record.id;
+  restoringHistory.value = false;
+  if (scrollToResult) {
+    window.requestAnimationFrame(() => document.querySelector(".preview-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+}
+
+async function deleteHistory(record: ServerHistoryRecord) {
+  if (!window.confirm("确定删除这条服务器历史及其图片文件吗？")) return;
+  try {
+    const response = await fetch(`/api/history/${encodeURIComponent(record.id)}`, { method: "DELETE" });
+    const data = await response.json() as { error?: { message?: string } };
+    if (!response.ok) throw new Error(data.error?.message || "删除失败");
+    serverHistory.value = serverHistory.value.filter((item) => item.id !== record.id);
+    if (activeHistoryId.value === record.id) {
+      activeHistoryId.value = null;
+      results.value = [];
+      generationMeta.value = null;
+      resultDimensions.value = {};
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "删除服务器历史失败";
+  }
+}
+
+async function clearServerHistory() {
+  if (serverHistory.value.length === 0 || !window.confirm("确定清空全部服务器生成历史和已保存图片吗？此操作不可恢复。")) return;
+  try {
+    const response = await fetch("/api/history", { method: "DELETE" });
+    const data = await response.json() as { error?: { message?: string } };
+    if (!response.ok) throw new Error(data.error?.message || "清空失败");
+    serverHistory.value = [];
+    activeHistoryId.value = null;
+    results.value = [];
+    generationMeta.value = null;
+    resultDimensions.value = {};
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "清空服务器历史失败";
+  }
+}
+
+function formatHistoryDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }
 
 function formatSizeTitle(value: OutputSize): string {
@@ -220,11 +356,15 @@ async function generate() {
       throw new Error(result.error || "生成任务失败");
     }
 
-    generationMeta.value = {
+    const completedMeta: GenerationResult = {
       ...result,
       durationMs: Date.now() - startedAt
     };
+    generationMeta.value = completedMeta;
     results.value = result.images || [];
+    if (results.value.length > 0) {
+      await saveGenerationToServer(completedMeta, results.value);
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "生成失败，请稍后重试";
   } finally {
@@ -550,6 +690,36 @@ function formatBytes(bytes: number) {
           </div>
         </section>
       </div>
+
+      <section class="history-panel panel">
+        <div class="history-heading">
+          <div>
+            <span class="step-number">03</span>
+            <div><h2>服务器生成历史</h2><p>生成完成后自动下载到服务器，刷新或更换浏览器仍可查看</p></div>
+          </div>
+          <button v-if="serverHistory.length" type="button" class="history-clear" @click="clearServerHistory">清空全部</button>
+        </div>
+
+        <div v-if="historyLoading" class="history-empty">正在读取服务器历史…</div>
+        <div v-else-if="serverHistory.length" class="history-grid">
+          <article v-for="record in serverHistory" :key="record.id" class="history-card" :class="{ active: activeHistoryId === record.id }">
+            <button type="button" class="history-thumb" @click="restoreHistory(record)">
+              <img v-if="record.images[0]" :src="record.images[0].url" :alt="record.prompt" />
+              <span v-if="record.images.length > 1">{{ record.images.length }} 张</span>
+            </button>
+            <div class="history-copy">
+              <div class="history-meta"><strong>{{ record.providerName }} · {{ record.model }}</strong><span>{{ formatHistoryDate(record.createdAt) }}</span></div>
+              <p>{{ record.prompt }}</p>
+              <small>{{ record.operation === 'image-edit' ? '参考图生成' : '文生图' }} · {{ formatSizeTitle(record.size) }}</small>
+            </div>
+            <div class="history-actions">
+              <button type="button" @click="restoreHistory(record)">恢复</button>
+              <button type="button" class="danger" @click="deleteHistory(record)">删除</button>
+            </div>
+          </article>
+        </div>
+        <div v-else class="history-empty">还没有服务器历史。下一次生成成功后会自动保存。</div>
+      </section>
     </main>
   </div>
 </template>

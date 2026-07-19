@@ -10,7 +10,7 @@ const imageSchema = z.object({
 });
 
 export const generateSchema = z.object({
-  provider: z.enum(["lingke", "grsai"]),
+  provider: z.enum(["lingke", "grsai", "nanobanana"]),
   model: z.string().min(1).max(160),
   operation: z.enum(["text-to-image", "image-edit"]),
   prompt: z.string().trim().min(2, "提示词至少需要 2 个字符").max(5000),
