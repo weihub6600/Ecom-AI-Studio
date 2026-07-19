@@ -1,7 +1,7 @@
 {
-  "name": "web",
+  "name": "@ecom-ai-studio/web",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,14 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.5.39"
+    "vue": "^3.5.24"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1",
-    "vue-tsc": "^3.3.5"
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "typescript": "^6.0.2",
+    "vite": "^7.2.2",
+    "vue-tsc": "^3.1.4"
   }
 }
