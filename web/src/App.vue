@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import AdminPanel from "./AdminPanel.vue";
+import UserPanel from "./UserPanel.vue";
 import type { GeneratedImage, GenerationResult, ModelCapability, OutputSize, ProviderId, UploadImage } from "./types";
 
 const promptTemplates = [
@@ -12,6 +14,17 @@ const promptTemplates = [
 const CLIENT_ID_STORAGE_KEY = "ecom-ai-studio:client-id:v1";
 const LOCAL_HISTORY_STORAGE_KEY = "ecom-ai-studio:local-history:v1";
 const LOCAL_HISTORY_LIMIT = 20;
+
+interface AuthUser {
+  id: string;
+  username: string;
+  role: "admin" | "user";
+  status: "pending" | "active" | "disabled" | "rejected";
+  createdAt: string;
+  approvedAt?: string;
+  lastLoginAt?: string;
+  credits: number;
+}
 
 interface ServerHistoryRecord {
   id: string;
@@ -54,6 +67,18 @@ const localHistory = ref<ServerHistoryRecord[]>([]);
 const clientId = ref("");
 const activeHistoryId = ref<string | null>(null);
 const restoringHistory = ref(false);
+const authUser = ref<AuthUser | null>(null);
+const authReady = ref(false);
+const authDialogOpen = ref(false);
+const authMode = ref<"login" | "register">("login");
+const authUsername = ref("");
+const authPassword = ref("");
+const authPasswordConfirm = ref("");
+const authError = ref("");
+const authSuccess = ref("");
+const authSubmitting = ref(false);
+const adminPanelOpen = ref(false);
+const userPanelOpen = ref(false);
 
 const providers = computed(() => {
   const unique = new Map<ProviderId, string>();
@@ -73,14 +98,22 @@ const providers = computed(() => {
 const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
 const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
 const sizeOptions = computed(() => (selectedModel.value?.sizes || []).map((value) => ({ value, title: formatSizeTitle(value) })));
+const selectedCreditCost = computed(() => selectedModel.value?.creditCost || 0);
+const hasEnoughCredits = computed(() => Boolean(
+  !authUser.value ||
+  authUser.value.role === "admin" ||
+  authUser.value.credits >= selectedCreditCost.value
+));
 const canGenerate = computed(() => Boolean(
   selectedModel.value?.configured &&
   prompt.value.trim().length >= 2 &&
   !loading.value &&
+  hasEnoughCredits.value &&
   (generationMode.value === "text-to-image" || uploads.value.length > 0)
 ));
 const operationLabel = computed(() => generationMode.value === "image-edit" ? "参考图生成" : "文字生成图片");
 const selectedSizeLabel = computed(() => formatSizeTitle(outputSize.value));
+const isAuthenticated = computed(() => Boolean(authUser.value));
 const providerSymbol = computed(() => {
   if (selectedProviderId.value === "grsai") return "G";
   if (selectedProviderId.value === "nanobanana") return "N";
@@ -128,9 +161,138 @@ watch(generationMode, (mode) => {
 
 onMounted(async () => {
   initializeClientId();
+  const previousClientId = clientId.value;
+  await loadCurrentUser();
   await loadModels();
-  await loadLocalHistory();
+  if (authUser.value) {
+    migrateLocalHistoryClientId(previousClientId, authUser.value.id);
+    clientId.value = authUser.value.id;
+    await loadLocalHistory();
+  } else {
+    localHistory.value = [];
+  }
 });
+
+async function loadCurrentUser() {
+  authReady.value = false;
+  try {
+    const response = await fetch("/api/auth/me");
+    if (!response.ok) {
+      authUser.value = null;
+      return;
+    }
+    const data = await response.json() as { user?: AuthUser };
+    authUser.value = data.user || null;
+  } catch {
+    authUser.value = null;
+  } finally {
+    authReady.value = true;
+  }
+}
+
+function openAuthDialog(mode: "login" | "register" = "login") {
+  authMode.value = mode;
+  authDialogOpen.value = true;
+  authError.value = "";
+  authSuccess.value = "";
+  authPassword.value = "";
+  authPasswordConfirm.value = "";
+}
+
+function closeAuthDialog() {
+  if (authSubmitting.value) return;
+  authDialogOpen.value = false;
+  authError.value = "";
+  authSuccess.value = "";
+}
+
+async function submitAuth() {
+  authError.value = "";
+  authSuccess.value = "";
+  const username = authUsername.value.trim();
+  if (username.length < 2) {
+    authError.value = "用户名至少需要 2 位";
+    return;
+  }
+  if (authPassword.value.length < 8) {
+    authError.value = "密码至少需要 8 位";
+    return;
+  }
+  if (authMode.value === "register" && authPassword.value !== authPasswordConfirm.value) {
+    authError.value = "两次输入的密码不一致";
+    return;
+  }
+
+  authSubmitting.value = true;
+  try {
+    const response = await fetch(`/api/auth/${authMode.value}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: authPassword.value })
+    });
+    const data = await response.json() as { user?: AuthUser; pending?: boolean; error?: { message?: string } };
+    if (!response.ok || !data.user) throw new Error(data.error?.message || "操作失败");
+
+    if (authMode.value === "register" && data.pending) {
+      authSuccess.value = "注册申请已提交，请等待站长审核。审核通过后再使用该账号登录。";
+      authMode.value = "login";
+      authPassword.value = "";
+      authPasswordConfirm.value = "";
+      return;
+    }
+
+    const previousClientId = clientId.value;
+    authUser.value = data.user;
+    migrateLocalHistoryClientId(previousClientId, data.user.id);
+    clientId.value = data.user.id;
+    authDialogOpen.value = false;
+    authPassword.value = "";
+    authPasswordConfirm.value = "";
+    await loadLocalHistory();
+  } catch (error) {
+    authError.value = error instanceof Error ? error.message : "操作失败，请稍后重试";
+  } finally {
+    authSubmitting.value = false;
+  }
+}
+
+async function logout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } finally {
+    authUser.value = null;
+    adminPanelOpen.value = false;
+    userPanelOpen.value = false;
+    localHistory.value = [];
+    activeHistoryId.value = null;
+    results.value = [];
+    resultDimensions.value = {};
+    generationMeta.value = null;
+    initializeClientId();
+  }
+}
+
+
+function handleAdminUserUpdated(user: AuthUser) {
+  if (!authUser.value || authUser.value.id !== user.id) return;
+  authUser.value = { ...authUser.value, ...user };
+}
+
+function handleBalanceUpdated(credits: number) {
+  if (!authUser.value) return;
+  authUser.value = { ...authUser.value, credits };
+}
+
+function formatPoints(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function requireLogin(): boolean {
+  if (authUser.value) return true;
+  openAuthDialog("login");
+  return false;
+}
 
 async function loadModels() {
   modelLoading.value = true;
@@ -174,6 +336,27 @@ function initializeClientId() {
     // 浏览器禁用本地存储时仍允许生成，但刷新后本机历史无法保留。
     clientId.value = createClientIdentifier();
     errorMessage.value = "浏览器本地存储不可用，本机历史将在刷新后丢失；服务器归档不受影响。";
+  }
+}
+
+function migrateLocalHistoryClientId(fromClientId: string, toClientId: string) {
+  if (!fromClientId || !toClientId || fromClientId === toClientId) return;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_HISTORY_STORAGE_KEY);
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    let changed = false;
+    const migrated = parsed.map((item) => {
+      if (isLocalHistoryRecord(item) && item.clientId === fromClientId) {
+        changed = true;
+        return { ...item, clientId: toClientId };
+      }
+      return item;
+    });
+    if (changed) window.localStorage.setItem(LOCAL_HISTORY_STORAGE_KEY, JSON.stringify(migrated));
+  } catch {
+    // 迁移失败不会影响注册、登录或服务器归档。
   }
 }
 
@@ -248,7 +431,7 @@ async function saveGenerationToServer(meta: GenerationResult, generatedImages: G
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        clientId: clientId.value,
+        clientId: authUser.value?.id || clientId.value,
         provider: meta.provider,
         providerName: providerDisplayName(meta.provider, selectedModel.value?.providerName),
         model: meta.model,
@@ -261,6 +444,10 @@ async function saveGenerationToServer(meta: GenerationResult, generatedImages: G
       })
     });
     const data = await response.json() as { record?: ServerHistoryRecord; error?: { message?: string } };
+    if (response.status === 401) {
+      openAuthDialog("login");
+      throw new Error(data.error?.message || "登录状态已失效，请重新登录");
+    }
     if (!response.ok || !data.record) throw new Error(data.error?.message || "自动保存到服务器失败");
 
     const record = data.record;
@@ -441,6 +628,7 @@ function useCustomPrompt() {
 }
 
 async function generate() {
+  if (!requireLogin()) return;
   if (!canGenerate.value || !selectedModel.value) return;
   loading.value = true;
   pollingProgress.value = "正在提交任务";
@@ -469,10 +657,25 @@ async function generate() {
       })
     });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || "生成失败");
+    const data = await response.json() as {
+      result?: GenerationResult;
+      credits?: number;
+      pointsCost?: number;
+      error?: { code?: string; message?: string };
+    };
+    if (typeof data.credits === "number" && authUser.value) handleBalanceUpdated(data.credits);
+    if (response.status === 401) {
+      authUser.value = null;
+      openAuthDialog("login");
+      throw new Error(data.error?.message || "登录状态已失效，请重新登录");
+    }
+    if (!response.ok) {
+      if (data.error?.code === "INSUFFICIENT_CREDITS") userPanelOpen.value = true;
+      throw new Error(data.error?.message || "生成失败");
+    }
+    if (!data.result) throw new Error("服务端没有返回生成结果");
 
-    let result = data.result as GenerationResult;
+    let result = data.result;
     if ((result.status === "pending" || result.status === "processing") && result.taskId) {
       result = await pollGenerationTask(result, startedAt);
     }
@@ -508,10 +711,17 @@ async function pollGenerationTask(initial: GenerationResult, startedAt: number):
 
     const url = `/api/images/tasks/${encodeURIComponent(initial.provider)}/${encodeURIComponent(initial.taskId)}?model=${encodeURIComponent(initial.model)}`;
     const response = await fetch(url);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || "查询生成任务失败");
+    const data = await response.json() as { result?: GenerationResult; credits?: number; error?: { message?: string } };
+    if (typeof data.credits === "number" && authUser.value) handleBalanceUpdated(data.credits);
+    if (response.status === 401) {
+      authUser.value = null;
+      openAuthDialog("login");
+      throw new Error(data.error?.message || "登录状态已失效，请重新登录");
+    }
+    if (!response.ok) throw new Error(data.error?.message || "查询生成任务失败");
+    if (!data.result) throw new Error("服务端没有返回任务状态");
 
-    const result = data.result as GenerationResult;
+    const result = data.result;
     pollingProgress.value = result.progress || "任务处理中";
 
     if (result.status === "completed") return result;
@@ -569,7 +779,9 @@ function resolveDownloadFileName(imageUrl: string, index: number, mimeType: stri
 
   const now = new Date();
   const dateStamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  return `${dateStamp}_${String(index + 1).padStart(3, "0")}.${extensionFromType(mimeType)}`;
+  const timeStamp = `${dateStamp}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+  const owner = authUser.value?.username || "user";
+  return `${owner}_${timeStamp}_${String(index + 1).padStart(3, "0")}.${extensionFromType(mimeType)}`;
 }
 
 function extractServerFileName(imageUrl: string): string | undefined {
@@ -578,7 +790,7 @@ function extractServerFileName(imageUrl: string): string | undefined {
     const rawName = parsed.pathname.split("/").pop();
     if (!rawName) return undefined;
     const fileName = decodeURIComponent(rawName);
-    return /^\d{8}_\d{3,}\.(?:png|jpe?g|webp|gif)$/i.test(fileName) ? fileName : undefined;
+    return /^[A-Za-z0-9_\u4e00-\u9fff]+_\d{8}_\d{6}_\d{3,}\.(?:png|jpe?g|webp|gif)$/iu.test(fileName) ? fileName : undefined;
   } catch {
     return undefined;
   }
@@ -612,6 +824,18 @@ function formatBytes(bytes: number) {
       </div>
       <div class="topbar-actions">
         <span class="mode-badge">BJR 0.1</span>
+        <template v-if="authReady">
+          <template v-if="authUser">
+            <span class="auth-user-chip"><span>{{ authUser.username.slice(0, 1).toUpperCase() }}</span><b>{{ authUser.username }}</b><small>{{ authUser.role === 'admin' ? '不限积分' : `${formatPoints(authUser.credits)} 积分` }}</small></span>
+            <button type="button" class="auth-top-button account" @click="userPanelOpen = true">我的后台</button>
+            <button v-if="authUser.role === 'admin'" type="button" class="auth-top-button admin" @click="adminPanelOpen = true">站长后台</button>
+            <button type="button" class="auth-top-button ghost" @click="logout">退出</button>
+          </template>
+          <template v-else>
+            <button type="button" class="auth-top-button ghost" @click="openAuthDialog('login')">登录</button>
+            <button type="button" class="auth-top-button primary" @click="openAuthDialog('register')">注册</button>
+          </template>
+        </template>
         <a class="github-link" href="https://517zhe.com/" target="_blank" rel="noopener noreferrer">517ZHE</a>
       </div>
     </header>
@@ -629,6 +853,14 @@ function formatBytes(bytes: number) {
           <div><strong>{{ selectedModel?.sizes.length || 0 }} 档</strong><span>输出尺寸</span></div>
         </div>
       </section>
+
+      <div v-if="authReady && !isAuthenticated" class="auth-guard-notice">
+        <div>
+          <strong>登录后才能使用 AI 生图</strong>
+          <span>普通用户注册后需要等待站长审核；审核通过并登录后才能提交 AI 生图任务。</span>
+        </div>
+        <button type="button" @click="openAuthDialog('login')">立即登录</button>
+      </div>
 
       <div v-if="errorMessage" class="alert" role="alert">
         <span class="alert-icon">!</span>
@@ -784,10 +1016,15 @@ function formatBytes(bytes: number) {
             </div>
           </div>
 
+          <div v-if="authUser" class="generation-credit-bar" :class="{ insufficient: !hasEnoughCredits }">
+            <span>本次消耗 <strong>{{ authUser.role === 'admin' ? '0' : formatPoints(selectedCreditCost) }}</strong> 积分</span>
+            <span>{{ authUser.role === 'admin' ? '站长账号不限积分' : `剩余 ${formatPoints(authUser.credits)} 积分` }}</span>
+            <button v-if="authUser.role !== 'admin'" type="button" @click="userPanelOpen = true">充值与明细</button>
+          </div>
           <button class="generate-button" type="button" :disabled="!canGenerate" @click="generate">
             <span v-if="loading" class="spinner"></span>
             <span v-else class="spark-icon">✦</span>
-            {{ loading ? '正在生成商业视觉…' : '开始生成' }}
+            {{ loading ? '正在生成商业视觉…' : !isAuthenticated ? '登录后开始生成' : !hasEnoughCredits ? '积分不足，请先充值' : '开始生成' }}
           </button>
         </section>
 
@@ -872,10 +1109,68 @@ function formatBytes(bytes: number) {
             </div>
           </article>
         </div>
-        <div v-else class="history-empty">当前电脑还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到服务器。</div>
+        <div v-else class="history-empty">
+          {{ isAuthenticated
+            ? '当前账号还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到服务器。'
+            : '登录后可使用 AI 生图，并查看当前账号在本机保存的最近历史。' }}
+        </div>
       </section>
       </div>
     </div>
   </main>
+
+  <div v-if="authDialogOpen" class="auth-overlay" @click.self="closeAuthDialog">
+    <section class="auth-dialog" role="dialog" aria-modal="true" :aria-label="authMode === 'login' ? '用户登录' : '用户注册'">
+      <button type="button" class="auth-dialog-close" aria-label="关闭" @click="closeAuthDialog">×</button>
+      <div class="auth-dialog-brand">
+        <span class="brand-mark"><span></span><span></span></span>
+        <div><strong>BJR AI</strong><small>ACCOUNT</small></div>
+      </div>
+      <h2>{{ authMode === 'login' ? '欢迎回来' : '创建账号' }}</h2>
+      <p>{{ authMode === 'login' ? '只有审核通过的账号才能登录并使用 AI 生图。' : '提交注册申请后，需要等待站长审核通过。' }}</p>
+
+      <div class="auth-tabs">
+        <button type="button" :class="{ active: authMode === 'login' }" @click="openAuthDialog('login')">登录</button>
+        <button type="button" :class="{ active: authMode === 'register' }" @click="openAuthDialog('register')">注册</button>
+      </div>
+
+      <form class="auth-form" @submit.prevent="submitAuth">
+        <label>
+          <span>用户名</span>
+          <input v-model="authUsername" type="text" autocomplete="username" minlength="2" maxlength="32" placeholder="2–32 位中文、字母、数字或下划线" />
+        </label>
+        <label>
+          <span>密码</span>
+          <input v-model="authPassword" type="password" :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'" maxlength="128" placeholder="至少 8 位" />
+        </label>
+        <label v-if="authMode === 'register'">
+          <span>确认密码</span>
+          <input v-model="authPasswordConfirm" type="password" autocomplete="new-password" maxlength="128" placeholder="再次输入密码" />
+        </label>
+        <div v-if="authSuccess" class="auth-form-success">{{ authSuccess }}</div>
+        <div v-if="authError" class="auth-form-error">{{ authError }}</div>
+        <button type="submit" class="auth-submit" :disabled="authSubmitting">
+          <span v-if="authSubmitting" class="spinner"></span>
+          {{ authSubmitting ? '正在提交…' : authMode === 'login' ? '登录并进入工作台' : '提交注册申请' }}
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <UserPanel
+    v-if="userPanelOpen && authUser"
+    :user="authUser"
+    @close="userPanelOpen = false"
+    @balance-updated="handleBalanceUpdated"
+  />
+
+  <AdminPanel
+    v-if="adminPanelOpen && authUser?.role === 'admin'"
+    :current-user-id="authUser.id"
+    @close="adminPanelOpen = false"
+    @user-updated="handleAdminUserUpdated"
+  />
   </div>
 </template>
+
+<style src="./auth.css"></style>

@@ -30,6 +30,7 @@ export interface HistorySaveInput {
 export interface HistoryRequestContext {
   clientIp?: string;
   userAgent?: string;
+  ownerUsername?: string;
 }
 
 export interface StoredHistoryRecord extends Omit<HistorySaveInput, "clientId"> {
@@ -149,14 +150,15 @@ export function createHistoryService(options: HistoryServiceOptions) {
 
       try {
         const images: HistoryImage[] = [];
-        const dateStamp = formatLocalDateStamp(new Date());
-        let nextSequence = await findNextDailySequence(generatedDir, dateStamp);
+        const timestamp = formatLocalDateTimeStamp(new Date());
+        const ownerUsername = normalizeOutputOwner(context.ownerUsername);
+        let nextSequence = await findNextOutputSequence(generatedDir, ownerUsername, timestamp);
 
         for (let index = 0; index < input.images.length; index += 1) {
           const source = input.images[index];
           if (!source) continue;
 
-          const fileBaseName = `${dateStamp}_${String(nextSequence).padStart(3, "0")}`;
+          const fileBaseName = `${ownerUsername}_${timestamp}_${String(nextSequence).padStart(3, "0")}`;
           nextSequence += 1;
 
           const stored = await downloadAndStoreImage(
@@ -220,10 +222,12 @@ export function createHistoryService(options: HistoryServiceOptions) {
     });
   }
 
-  async function clear(): Promise<void> {
+  async function clear(clientId?: string): Promise<void> {
     await withWriteLock(async () => {
-      // “清空全部”只清空网页历史记录，不删除 data/generated 中的服务器图片。
-      await atomicWriteJson(indexFile, []);
+      // 只清除当前用户在网页中的历史记录；data/generated 中的服务器原图始终保留。
+      const records = await readRecords(indexFile);
+      const retained = clientId ? records.filter((item) => item.clientId !== clientId) : [];
+      await atomicWriteJson(indexFile, retained);
     });
   }
 
@@ -307,10 +311,15 @@ async function downloadAndStoreImage(
   }
 }
 
-async function findNextDailySequence(generatedDir: string, dateStamp: string): Promise<number> {
+async function findNextOutputSequence(
+  generatedDir: string,
+  ownerUsername: string,
+  timestamp: string
+): Promise<number> {
   const entries = await readdir(generatedDir, { withFileTypes: true });
-  const escapedDate = dateStamp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^${escapedDate}_(\\d+)\\.(?:png|jpe?g|webp|gif)$`, "i");
+  const prefix = `${ownerUsername}_${timestamp}_`;
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedPrefix}(\\d+)\\.(?:png|jpe?g|webp|gif)$`, "i");
   let maximum = 0;
 
   for (const entry of entries) {
@@ -324,11 +333,20 @@ async function findNextDailySequence(generatedDir: string, dateStamp: string): P
   return maximum + 1;
 }
 
-function formatLocalDateStamp(date: Date): string {
+function formatLocalDateTimeStamp(date: Date): string {
   const year = String(date.getFullYear());
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  return `${year}${month}${day}`;
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+function normalizeOutputOwner(value: string | undefined): string {
+  const normalized = value?.trim();
+  if (normalized && /^[A-Za-z0-9_\u4e00-\u9fff]{2,32}$/u.test(normalized)) return normalized;
+  return "user";
 }
 
 async function fetchWithSafeRedirects(initialUrl: string, signal: AbortSignal): Promise<Response> {
