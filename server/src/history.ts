@@ -1,10 +1,10 @@
 import { lookup } from "node:dns/promises";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-export type HistoryProviderId = "lingke" | "grsai";
+export type HistoryProviderId = "lingke" | "grsai" | "nanobanana";
 export type HistoryOperation = "text-to-image" | "image-edit";
 
 export interface HistoryImage {
@@ -15,6 +15,7 @@ export interface HistoryImage {
 }
 
 export interface HistorySaveInput {
+  clientId: string;
   provider: HistoryProviderId;
   providerName: string;
   model: string;
@@ -26,9 +27,18 @@ export interface HistorySaveInput {
   images: HistoryImage[];
 }
 
-export interface StoredHistoryRecord extends HistorySaveInput {
+export interface HistoryRequestContext {
+  clientIp?: string;
+  userAgent?: string;
+}
+
+export interface StoredHistoryRecord extends Omit<HistorySaveInput, "clientId"> {
   id: string;
   createdAt: string;
+  /** 旧版记录可能没有 clientId；新记录始终会写入。 */
+  clientId?: string;
+  clientIp?: string;
+  userAgent?: string;
 }
 
 export class HistoryValidationError extends Error {
@@ -40,6 +50,7 @@ export class HistoryValidationError extends Error {
 
 interface HistoryServiceOptions {
   dataDir: string;
+  /** 为兼容现有调用保留；当前版本始终永久保存，不自动清理历史记录。 */
   maxRecords?: number;
   maxImageBytes?: number;
   downloadTimeoutMs?: number;
@@ -50,13 +61,22 @@ interface StoredFile {
   mimeType: string;
 }
 
-const DEFAULT_MAX_RECORDS = 100;
 const DEFAULT_MAX_IMAGE_BYTES = 40 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_REDIRECTS = 5;
 
+export function parseHistoryClientId(value: unknown): string {
+  if (typeof value !== "string") throw new HistoryValidationError("clientId 必须是字符串");
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(normalized)) {
+    throw new HistoryValidationError("clientId 格式不正确");
+  }
+  return normalized;
+}
+
 export function parseHistorySaveInput(value: unknown): HistorySaveInput {
   const body = asObject(value, "请求体格式不正确");
+  const clientId = parseHistoryClientId(body.clientId);
   const provider = readProvider(body.provider);
   const providerName = readRequiredString(body.providerName, "providerName", 80);
   const model = readRequiredString(body.model, "model", 160);
@@ -80,6 +100,7 @@ export function parseHistorySaveInput(value: unknown): HistorySaveInput {
   });
 
   return {
+    clientId,
     provider,
     providerName,
     model,
@@ -96,7 +117,6 @@ export function createHistoryService(options: HistoryServiceOptions) {
   const dataDir = path.resolve(options.dataDir);
   const generatedDir = path.join(dataDir, "generated");
   const indexFile = path.join(dataDir, "history.json");
-  const maxRecords = positiveIntegerOrDefault(options.maxRecords, DEFAULT_MAX_RECORDS);
   const maxImageBytes = positiveIntegerOrDefault(options.maxImageBytes, DEFAULT_MAX_IMAGE_BYTES);
   const downloadTimeoutMs = positiveIntegerOrDefault(options.downloadTimeoutMs, DEFAULT_DOWNLOAD_TIMEOUT_MS);
   let writeQueue: Promise<void> = Promise.resolve();
@@ -114,24 +134,38 @@ export function createHistoryService(options: HistoryServiceOptions) {
     }
   }
 
-  async function list(limit = 20): Promise<StoredHistoryRecord[]> {
+  async function list(limit = 20, clientId?: string): Promise<StoredHistoryRecord[]> {
     await writeQueue;
     const records = await readRecords(indexFile);
+    const filtered = clientId ? records.filter((item) => item.clientId === clientId) : records;
     const safeLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 100);
-    return records.slice(0, safeLimit);
+    return filtered.slice(0, safeLimit);
   }
 
-  async function save(input: HistorySaveInput): Promise<StoredHistoryRecord> {
+  async function save(input: HistorySaveInput, context: HistoryRequestContext = {}): Promise<StoredHistoryRecord> {
     return withWriteLock(async () => {
       const id = randomUUID();
       const savedFiles: string[] = [];
 
       try {
         const images: HistoryImage[] = [];
+        const dateStamp = formatLocalDateStamp(new Date());
+        let nextSequence = await findNextDailySequence(generatedDir, dateStamp);
+
         for (let index = 0; index < input.images.length; index += 1) {
           const source = input.images[index];
           if (!source) continue;
-          const stored = await downloadAndStoreImage(source.url, id, index, generatedDir, maxImageBytes, downloadTimeoutMs);
+
+          const fileBaseName = `${dateStamp}_${String(nextSequence).padStart(3, "0")}`;
+          nextSequence += 1;
+
+          const stored = await downloadAndStoreImage(
+            source.url,
+            fileBaseName,
+            generatedDir,
+            maxImageBytes,
+            downloadTimeoutMs
+          );
           savedFiles.push(stored.fileName);
           images.push({
             ...source,
@@ -145,18 +179,27 @@ export function createHistoryService(options: HistoryServiceOptions) {
         }
 
         const record: StoredHistoryRecord = {
-          ...input,
+          provider: input.provider,
+          providerName: input.providerName,
+          model: input.model,
+          prompt: input.prompt,
+          operation: input.operation,
+          size: input.size,
+          durationMs: input.durationMs,
+          cost: input.cost,
           id,
           createdAt: new Date().toISOString(),
+          clientId: input.clientId,
+          clientIp: normalizeAuditText(context.clientIp, 120),
+          userAgent: normalizeAuditText(context.userAgent, 600),
           images
         };
 
         const current = await readRecords(indexFile);
         const combined = [record, ...current];
-        const retained = combined.slice(0, maxRecords);
-        const expired = combined.slice(maxRecords);
-        await atomicWriteJson(indexFile, retained);
-        await Promise.all(expired.map((item) => deleteRecordFiles(item, generatedDir)));
+
+        // 永久保存全部服务器历史：不再按数量截断，也不自动删除旧图片。
+        await atomicWriteJson(indexFile, combined);
         return record;
       } catch (error) {
         await Promise.all(savedFiles.map((fileName) => rm(path.join(generatedDir, fileName), { force: true })));
@@ -165,21 +208,21 @@ export function createHistoryService(options: HistoryServiceOptions) {
     });
   }
 
-  async function remove(id: string): Promise<boolean> {
+  async function remove(id: string, clientId?: string): Promise<boolean> {
     return withWriteLock(async () => {
       const records = await readRecords(indexFile);
-      const record = records.find((item) => item.id === id);
+      const record = records.find((item) => item.id === id && (!clientId || item.clientId === clientId));
       if (!record) return false;
+
+      // 网页删除仅移除 history.json 中的记录，服务器原图继续永久保留。
       await atomicWriteJson(indexFile, records.filter((item) => item.id !== id));
-      await deleteRecordFiles(record, generatedDir);
       return true;
     });
   }
 
   async function clear(): Promise<void> {
     await withWriteLock(async () => {
-      await rm(generatedDir, { recursive: true, force: true });
-      await mkdir(generatedDir, { recursive: true });
+      // “清空全部”只清空网页历史记录，不删除 data/generated 中的服务器图片。
       await atomicWriteJson(indexFile, []);
     });
   }
@@ -203,8 +246,7 @@ export function createHistoryService(options: HistoryServiceOptions) {
 
 async function downloadAndStoreImage(
   sourceUrl: string,
-  recordId: string,
-  index: number,
+  fileBaseName: string,
   generatedDir: string,
   maxImageBytes: number,
   timeoutMs: number
@@ -212,7 +254,7 @@ async function downloadAndStoreImage(
   const dataImage = decodeDataImage(sourceUrl, maxImageBytes);
   if (dataImage) {
     const extension = extensionFromMimeType(dataImage.mimeType);
-    const fileName = `${recordId}-${index + 1}.${extension}`;
+    const fileName = `${fileBaseName}.${extension}`;
     await writeFile(path.join(generatedDir, fileName), dataImage.buffer, { flag: "wx" });
     return { fileName, mimeType: dataImage.mimeType };
   }
@@ -252,7 +294,7 @@ async function downloadAndStoreImage(
     if (!mimeType) throw new Error("服务商返回的内容不是受支持的图片格式");
 
     const extension = extensionFromMimeType(mimeType);
-    const fileName = `${recordId}-${index + 1}.${extension}`;
+    const fileName = `${fileBaseName}.${extension}`;
     await writeFile(path.join(generatedDir, fileName), buffer, { flag: "wx" });
     return { fileName, mimeType };
   } catch (error) {
@@ -263,6 +305,30 @@ async function downloadAndStoreImage(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function findNextDailySequence(generatedDir: string, dateStamp: string): Promise<number> {
+  const entries = await readdir(generatedDir, { withFileTypes: true });
+  const escapedDate = dateStamp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedDate}_(\\d+)\\.(?:png|jpe?g|webp|gif)$`, "i");
+  let maximum = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const match = pattern.exec(entry.name);
+    if (!match) continue;
+    const sequence = Number(match[1]);
+    if (Number.isSafeInteger(sequence) && sequence > maximum) maximum = sequence;
+  }
+
+  return maximum + 1;
+}
+
+function formatLocalDateStamp(date: Date): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
 }
 
 async function fetchWithSafeRedirects(initialUrl: string, signal: AbortSignal): Promise<Response> {
@@ -404,7 +470,10 @@ function isStoredHistoryRecord(value: unknown): value is StoredHistoryRecord {
   return (
     typeof item.id === "string" &&
     typeof item.createdAt === "string" &&
-    (item.provider === "lingke" || item.provider === "grsai") &&
+    (item.clientId === undefined || typeof item.clientId === "string") &&
+    (item.clientIp === undefined || typeof item.clientIp === "string") &&
+    (item.userAgent === undefined || typeof item.userAgent === "string") &&
+    (item.provider === "lingke" || item.provider === "grsai" || item.provider === "nanobanana") &&
     typeof item.model === "string" &&
     typeof item.prompt === "string" &&
     Array.isArray(item.images) &&
@@ -419,19 +488,6 @@ async function atomicWriteJson(filePath: string, value: unknown): Promise<void> 
   await rename(tempFile, filePath);
 }
 
-async function deleteRecordFiles(record: StoredHistoryRecord, generatedDir: string): Promise<void> {
-  await Promise.all(record.images.map(async (image) => {
-    const fileName = fileNameFromPublicUrl(image.url);
-    if (!fileName) return;
-    await rm(path.join(generatedDir, fileName), { force: true });
-  }));
-}
-
-function fileNameFromPublicUrl(url: string): string | undefined {
-  if (!url.startsWith("/generated/")) return undefined;
-  const decoded = decodeURIComponent(url.slice("/generated/".length));
-  return path.basename(decoded) === decoded ? decoded : undefined;
-}
 
 function asObject(value: unknown, message: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HistoryValidationError(message);
@@ -454,7 +510,7 @@ function readOptionalString(value: unknown, field: string, maxLength: number): s
 }
 
 function readProvider(value: unknown): HistoryProviderId {
-  if (value === "lingke" || value === "grsai") return value;
+  if (value === "lingke" || value === "grsai" || value === "nanobanana") return value;
   throw new HistoryValidationError("provider 不正确");
 }
 
@@ -478,6 +534,13 @@ function readOptionalNonNegativeNumber(value: unknown, field: string): number | 
   }
   return value;
 }
+
+function normalizeAuditText(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, maxLength) : undefined;
+}
+
 
 function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;

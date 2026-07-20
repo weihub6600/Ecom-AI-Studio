@@ -73,7 +73,7 @@ export function getModels(): ModelCapability[] {
     {
       id: "grsai-gpt-image-2",
       provider: "grsai",
-      providerName: "GRSAI",
+      providerName: "GPT",
       name: "GPT Image 2",
       description: "GRSAI 同步图像生成模型，支持文生图与参考图生成",
       configured: grsaiConfigured(),
@@ -89,7 +89,7 @@ export function getModels(): ModelCapability[] {
     {
       id: "grsai-gpt-image-2-vip",
       provider: "grsai",
-      providerName: "GRSAI",
+      providerName: "GPT",
       name: "GPT Image 2 VIP",
       description: "GRSAI 1K–4K 高分辨率同步图像生成模型",
       configured: grsaiConfigured(),

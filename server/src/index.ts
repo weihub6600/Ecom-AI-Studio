@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
+import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
@@ -24,6 +25,23 @@ const historyService = createHistoryService({
   downloadTimeoutMs: Number(process.env.IMAGE_DOWNLOAD_TIMEOUT_MS || 120_000)
 });
 await historyService.initialize();
+
+// 全局跨域配置
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+// 统一处理OPTIONS预检请求，彻底规避路由通配符报错
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "*");
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "120mb" }));
@@ -168,17 +186,22 @@ app.get("/api/images/tasks/:provider/:taskId", async (request, response) => {
   }
 });
 
+// 【终极修复：替换非法 /* 路由，兼容新版 path-to-regexp】
 const webDist = path.resolve(currentDir, "../../web/dist");
-
 app.use(express.static(webDist));
-app.get("/{*path}", (request, response, next) => {
-  if (request.path.startsWith("/api/")) return next();
-  response.sendFile(path.join(webDist, "index.html"), (error) => {
-    if (error) next();
-  });
+
+// 先拦截所有API请求
+app.use("/api", (req, res, next) => next());
+// 合法兜底路由，替代非法 /*
+app.get("/", (req, res, next) => {
+  res.sendFile(path.join(webDist, "index.html"), () => next());
+});
+app.get("/:page", (req, res, next) => {
+  res.sendFile(path.join(webDist, "index.html"), () => next());
 });
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Ecom AI Studio API: http://localhost:${port}`);
+  console.log(`LAN API: http://<服务器局域网IP>:${port}`);
   console.log(`Generated images: ${historyService.generatedDir}`);
 });

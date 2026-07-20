@@ -9,9 +9,16 @@ const promptTemplates = [
   "生成纯白背景商品效果图，修正光线和阴影，去除杂乱背景，不改变商品本体、形状、文字和Logo，适合电商平台白底主图。"
 ];
 
+const CLIENT_ID_STORAGE_KEY = "ecom-ai-studio:client-id:v1";
+const LOCAL_HISTORY_STORAGE_KEY = "ecom-ai-studio:local-history:v1";
+const LOCAL_HISTORY_LIMIT = 20;
+
 interface ServerHistoryRecord {
   id: string;
   createdAt: string;
+  clientId: string;
+  clientIp?: string;
+  userAgent?: string;
   provider: ProviderId;
   providerName: string;
   model: string;
@@ -24,10 +31,10 @@ interface ServerHistoryRecord {
 }
 
 const models = ref<ModelCapability[]>([]);
-const selectedProviderId = ref<ProviderId>("lingke");
+const selectedProviderId = ref<ProviderId>("grsai");
 const selectedModelId = ref("gpt-image-2");
 const prompt = ref(promptTemplates[0] ?? "");
-const generationMode = ref<"text-to-image" | "image-edit">("text-to-image");
+const generationMode = ref<"text-to-image" | "image-edit">("image-edit");
 const negativePrompt = ref("模糊、变形、错误文字、重复商品、裁切商品、改变Logo、改变包装结构");
 const outputSize = ref<OutputSize>("1024x1024");
 const count = ref(1);
@@ -43,15 +50,25 @@ const dragging = ref(false);
 const errorMessage = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
-const serverHistory = ref<ServerHistoryRecord[]>([]);
-const historyLoading = ref(true);
+const localHistory = ref<ServerHistoryRecord[]>([]);
+const clientId = ref("");
 const activeHistoryId = ref<string | null>(null);
 const restoringHistory = ref(false);
 
 const providers = computed(() => {
   const unique = new Map<ProviderId, string>();
-  for (const model of models.value) unique.set(model.provider, model.providerName);
-  return Array.from(unique, ([id, name]) => ({ id, name }));
+  for (const model of models.value) unique.set(model.provider, providerDisplayName(model.provider, model.providerName));
+
+  // 固定服务商显示顺序：GRSAI、Nano Banana、百嘉瑞AI。
+  const providerOrder: ProviderId[] = ["grsai", "nanobanana", "lingke"];
+
+  return Array.from(unique, ([id, name]) => ({ id, name })).sort((a, b) => {
+    const aIndex = providerOrder.indexOf(a.id);
+    const bIndex = providerOrder.indexOf(b.id);
+    const aOrder = aIndex === -1 ? providerOrder.length : aIndex;
+    const bOrder = bIndex === -1 ? providerOrder.length : bIndex;
+    return aOrder - bOrder;
+  });
 });
 const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
 const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
@@ -69,6 +86,15 @@ const providerSymbol = computed(() => {
   if (selectedProviderId.value === "nanobanana") return "N";
   return "百";
 });
+
+function providerDisplayName(provider: ProviderId | string | undefined, providerName?: string): string {
+  if (provider === "grsai") return "GPT";
+  return providerName || "API";
+}
+
+function displayText(value: string): string {
+  return value.replace(/GRSAI/g, "GPT");
+}
 
 watch(selectedProviderId, () => {
   const firstModel = availableModels.value[0];
@@ -101,8 +127,9 @@ watch(generationMode, (mode) => {
 });
 
 onMounted(async () => {
+  initializeClientId();
   await loadModels();
-  await loadServerHistory();
+  await loadLocalHistory();
 });
 
 async function loadModels() {
@@ -113,8 +140,9 @@ async function loadModels() {
     if (!response.ok) throw new Error("无法读取模型列表");
     const data = await response.json();
     models.value = data.models || [];
-    const firstLingke = models.value.find((model) => model.provider === "lingke");
-    const firstModel = firstLingke || models.value[0];
+    // 默认选择服务商列表中的第一个：GRSAI。
+    const firstGrsai = models.value.find((model) => model.provider === "grsai");
+    const firstModel = firstGrsai || models.value[0];
     if (firstModel) {
       selectedProviderId.value = firstModel.provider;
       selectedModelId.value = firstModel.id;
@@ -126,30 +154,103 @@ async function loadModels() {
   }
 }
 
-async function loadServerHistory() {
-  historyLoading.value = true;
+function createClientIdentifier(): string {
+  const randomPart = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  return `client-${randomPart}`;
+}
+
+function initializeClientId() {
   try {
-    const response = await fetch("/api/history?limit=50");
-    const data = await response.json() as { history?: ServerHistoryRecord[]; error?: { message?: string } };
-    if (!response.ok) throw new Error(data.error?.message || "读取服务器历史失败");
-    serverHistory.value = Array.isArray(data.history) ? data.history : [];
-    const latest = serverHistory.value[0];
-    if (latest) await restoreHistory(latest, false);
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "读取服务器历史失败";
-  } finally {
-    historyLoading.value = false;
+    const stored = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)?.trim();
+    if (stored && /^[A-Za-z0-9._:-]{8,160}$/.test(stored)) {
+      clientId.value = stored;
+      return;
+    }
+    clientId.value = createClientIdentifier();
+    window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, clientId.value);
+  } catch {
+    // 浏览器禁用本地存储时仍允许生成，但刷新后本机历史无法保留。
+    clientId.value = createClientIdentifier();
+    errorMessage.value = "浏览器本地存储不可用，本机历史将在刷新后丢失；服务器归档不受影响。";
   }
+}
+
+async function loadLocalHistory() {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_HISTORY_STORAGE_KEY);
+    if (!raw) {
+      localHistory.value = [];
+      return;
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+    const records = Array.isArray(parsed)
+      ? parsed.filter(isLocalHistoryRecord).filter((record) => record.clientId === clientId.value)
+      : [];
+    localHistory.value = records.slice(0, LOCAL_HISTORY_LIMIT);
+
+    const latest = localHistory.value[0];
+    if (latest) await restoreHistory(latest, false);
+  } catch {
+    localHistory.value = [];
+    try {
+      window.localStorage.removeItem(LOCAL_HISTORY_STORAGE_KEY);
+    } catch {
+      // 无需覆盖主要错误信息。
+    }
+    errorMessage.value = "本机历史数据已损坏，已自动重置；服务器归档仍然保留。";
+  }
+}
+
+function isLocalHistoryRecord(value: unknown): value is ServerHistoryRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<ServerHistoryRecord>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.createdAt === "string" &&
+    typeof record.clientId === "string" &&
+    (record.provider === "lingke" || record.provider === "grsai" || record.provider === "nanobanana") &&
+    typeof record.providerName === "string" &&
+    typeof record.model === "string" &&
+    typeof record.prompt === "string" &&
+    (record.operation === "text-to-image" || record.operation === "image-edit") &&
+    typeof record.size === "string" &&
+    Array.isArray(record.images) &&
+    record.images.every((image) => Boolean(image && typeof image.url === "string"))
+  );
+}
+
+function persistLocalHistory() {
+  try {
+    window.localStorage.setItem(
+      LOCAL_HISTORY_STORAGE_KEY,
+      JSON.stringify(localHistory.value.slice(0, LOCAL_HISTORY_LIMIT))
+    );
+  } catch {
+    errorMessage.value = "服务器已保存本次记录，但浏览器无法写入本机历史。";
+  }
+}
+
+function addToLocalHistory(record: ServerHistoryRecord) {
+  localHistory.value = [
+    record,
+    ...localHistory.value.filter((item) => item.id !== record.id)
+  ].slice(0, LOCAL_HISTORY_LIMIT);
+  persistLocalHistory();
 }
 
 async function saveGenerationToServer(meta: GenerationResult, generatedImages: GeneratedImage[]) {
   try {
+    if (!clientId.value) initializeClientId();
     const response = await fetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        clientId: clientId.value,
         provider: meta.provider,
-        providerName: selectedModel.value?.providerName || meta.provider,
+        providerName: providerDisplayName(meta.provider, selectedModel.value?.providerName),
         model: meta.model,
         prompt: prompt.value.trim(),
         operation: generationMode.value,
@@ -163,7 +264,7 @@ async function saveGenerationToServer(meta: GenerationResult, generatedImages: G
     if (!response.ok || !data.record) throw new Error(data.error?.message || "自动保存到服务器失败");
 
     const record = data.record;
-    serverHistory.value = [record, ...serverHistory.value.filter((item) => item.id !== record.id)].slice(0, 50);
+    addToLocalHistory(record);
     activeHistoryId.value = record.id;
     results.value = record.images;
     generationMeta.value = { ...meta, images: record.images };
@@ -199,38 +300,26 @@ async function restoreHistory(record: ServerHistoryRecord, scrollToResult = true
   }
 }
 
-async function deleteHistory(record: ServerHistoryRecord) {
-  if (!window.confirm("确定删除这条服务器历史及其图片文件吗？")) return;
-  try {
-    const response = await fetch(`/api/history/${encodeURIComponent(record.id)}`, { method: "DELETE" });
-    const data = await response.json() as { error?: { message?: string } };
-    if (!response.ok) throw new Error(data.error?.message || "删除失败");
-    serverHistory.value = serverHistory.value.filter((item) => item.id !== record.id);
-    if (activeHistoryId.value === record.id) {
-      activeHistoryId.value = null;
-      results.value = [];
-      generationMeta.value = null;
-      resultDimensions.value = {};
-    }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "删除服务器历史失败";
-  }
-}
-
-async function clearServerHistory() {
-  if (serverHistory.value.length === 0 || !window.confirm("确定清空全部服务器生成历史和已保存图片吗？此操作不可恢复。")) return;
-  try {
-    const response = await fetch("/api/history", { method: "DELETE" });
-    const data = await response.json() as { error?: { message?: string } };
-    if (!response.ok) throw new Error(data.error?.message || "清空失败");
-    serverHistory.value = [];
+function deleteHistory(record: ServerHistoryRecord) {
+  if (!window.confirm("确定从当前电脑的历史列表中移除这条记录吗？服务器归档和图片文件不会删除。")) return;
+  localHistory.value = localHistory.value.filter((item) => item.id !== record.id);
+  persistLocalHistory();
+  if (activeHistoryId.value === record.id) {
     activeHistoryId.value = null;
     results.value = [];
     generationMeta.value = null;
     resultDimensions.value = {};
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "清空服务器历史失败";
   }
+}
+
+function clearLocalHistory() {
+  if (localHistory.value.length === 0 || !window.confirm("确定清空当前电脑最近 20 条历史吗？服务器上的完整归档不会删除。")) return;
+  localHistory.value = [];
+  persistLocalHistory();
+  activeHistoryId.value = null;
+  results.value = [];
+  generationMeta.value = null;
+  resultDimensions.value = {};
 }
 
 function formatHistoryDate(value: string): string {
@@ -256,24 +345,47 @@ function openFileDialog() {
   fileInput.value?.click();
 }
 
-function onFileChange(event: Event) {
+async function onFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
-  addFiles(input.files);
+  // 必须先复制 File 对象，再清空 input；避免部分浏览器清空后 FileList 失效。
+  const files = Array.from(input.files || []);
   input.value = "";
+  await addFiles(files);
 }
 
-function onDrop(event: DragEvent) {
+async function onDrop(event: DragEvent) {
   dragging.value = false;
-  addFiles(event.dataTransfer?.files || null);
+  await addFiles(Array.from(event.dataTransfer?.files || []));
 }
 
-async function addFiles(fileList: FileList | null) {
+async function addFiles(files: File[]) {
   errorMessage.value = "";
-  if (!fileList || !selectedModel.value) return;
-  const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
-  const remaining = selectedModel.value.maxReferenceImages - uploads.value.length;
 
-  for (const file of Array.from(fileList).slice(0, Math.max(0, remaining))) {
+  const model = selectedModel.value;
+  if (!model) {
+    errorMessage.value = "模型信息尚未加载完成，请稍后重试";
+    return;
+  }
+  if (!model.supportsReferenceImages || model.maxReferenceImages <= 0) {
+    errorMessage.value = `${model.name} 不支持参考图上传`;
+    return;
+  }
+  if (files.length === 0) return;
+
+  const remaining = model.maxReferenceImages - uploads.value.length;
+  if (remaining <= 0) {
+    errorMessage.value = `该模型最多支持 ${model.maxReferenceImages} 张参考图`;
+    return;
+  }
+
+  const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+  const selectedFiles = files.slice(0, remaining);
+
+  if (files.length > remaining) {
+    errorMessage.value = `只添加前 ${remaining} 张图片；该模型最多支持 ${model.maxReferenceImages} 张参考图`;
+  }
+
+  for (const file of selectedFiles) {
     if (!allowed.has(file.type)) {
       errorMessage.value = `不支持 ${file.name}，仅允许 JPG、PNG、WEBP`;
       continue;
@@ -282,15 +394,28 @@ async function addFiles(fileList: FileList | null) {
       errorMessage.value = `${file.name} 超过 10MB`;
       continue;
     }
-    const dataUrl = await readFile(file);
-    uploads.value.push({
-      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
-      name: file.name,
-      mimeType: file.type as UploadImage["mimeType"],
-      dataUrl,
-      size: file.size
-    });
+
+    try {
+      const dataUrl = await readFile(file);
+      uploads.value.push({
+        id: createUploadId(file),
+        name: file.name,
+        mimeType: file.type as UploadImage["mimeType"],
+        dataUrl,
+        size: file.size
+      });
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : `读取 ${file.name} 失败`;
+    }
   }
+}
+
+function createUploadId(file: File): string {
+  // crypto.randomUUID() 在普通 HTTP 局域网地址下可能不可用；localhost 通常不会暴露该问题。
+  const randomPart = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${file.name}-${file.lastModified}-${randomPart}`;
 }
 
 function readFile(file: File): Promise<string> {
@@ -428,13 +553,34 @@ async function downloadImage(image: GeneratedImage, index: number) {
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = `ecom-ai-${Date.now()}-${index + 1}.${extensionFromType(blob.type)}`;
+    link.download = resolveDownloadFileName(image.url, index, blob.type);
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
   } catch {
     window.open(image.url, "_blank", "noopener,noreferrer");
+  }
+}
+
+function resolveDownloadFileName(imageUrl: string, index: number, mimeType: string): string {
+  const serverFileName = extractServerFileName(imageUrl);
+  if (serverFileName) return serverFileName;
+
+  const now = new Date();
+  const dateStamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  return `${dateStamp}_${String(index + 1).padStart(3, "0")}.${extensionFromType(mimeType)}`;
+}
+
+function extractServerFileName(imageUrl: string): string | undefined {
+  try {
+    const parsed = new URL(imageUrl, window.location.href);
+    const rawName = parsed.pathname.split("/").pop();
+    if (!rawName) return undefined;
+    const fileName = decodeURIComponent(rawName);
+    return /^\d{8}_\d{3,}\.(?:png|jpe?g|webp|gif)$/i.test(fileName) ? fileName : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -475,11 +621,11 @@ function formatBytes(bytes: number) {
         <div>
           <span class="eyebrow">ECOMMERCE CREATIVE ENGINE</span>
           <h1>一张商品图，生成完整商业视觉</h1>
-          <p>支持百嘉瑞AI 与 GRSAI 双 API，可在 GPT Image 2 和 GPT Image 2 VIP 之间切换。</p>
+          <p>支持百嘉瑞AI 与 GPT 双 API，可在 GPT Image 2 和 GPT Image 2 VIP 之间切换。</p>
         </div>
         <div class="intro-stats">
           <div><strong>{{ selectedModel?.name || '—' }}</strong><span>当前模型</span></div>
-          <div><strong>{{ selectedModel?.configured ? '已连接' : '待配置' }}</strong><span>{{ selectedModel?.providerName || 'API' }}</span></div>
+          <div><strong>{{ selectedModel?.configured ? '已连接' : '待配置' }}</strong><span>{{ providerDisplayName(selectedModel?.provider, selectedModel?.providerName) }}</span></div>
           <div><strong>{{ selectedModel?.sizes.length || 0 }} 档</strong><span>输出尺寸</span></div>
         </div>
       </section>
@@ -500,9 +646,9 @@ function formatBytes(bytes: number) {
             <span class="operation-pill">{{ operationLabel }}</span>
           </div>
 
-          <div class="field-block">
-            <label>API 服务商</label>
-            <div class="segmented">
+          <div class="field-block provider-field">
+  <label>API 服务商</label>
+  <div class="segmented provider-segmented">
               <button
                 v-for="provider in providers"
                 :key="provider.id"
@@ -524,7 +670,7 @@ function formatBytes(bytes: number) {
               </select>
               <div class="model-card" :class="{ disabled: !selectedModel.configured }">
                 <div class="provider-symbol">{{ providerSymbol }}</div>
-                <div class="model-copy"><strong>{{ selectedModel.providerName }} · {{ selectedModel.name }}</strong><span>{{ selectedModel.description }}</span></div>
+                <div class="model-copy"><strong>{{ providerDisplayName(selectedModel.provider, selectedModel.providerName) }} · {{ selectedModel.name }}</strong><span>{{ displayText(selectedModel.description) }}</span></div>
                 <span class="status-tag" :class="selectedModel.configured ? 'ready' : 'offline'">
                   {{ selectedModel.configured ? '可用' : '需配置 Key' }}
                 </span>
@@ -537,12 +683,18 @@ function formatBytes(bytes: number) {
             <div class="mode-selector">
               <button type="button" :class="{ active: generationMode === 'image-edit' }" :aria-pressed="generationMode === 'image-edit'" @click="generationMode = 'image-edit'">
                 <span class="mode-icon">图</span>
-                <span class="mode-copy"><strong>参考图生成</strong><small>上传商品图，保留主体并重构场景</small></span>
+                <div class="mode-copy">
+  <div class="title">参考图生成</div>
+  <div class="desc">上传商品图，保留主体并重构场景</div>
+</div>
                 <span class="mode-check">✓</span>
               </button>
               <button type="button" :class="{ active: generationMode === 'text-to-image' }" :aria-pressed="generationMode === 'text-to-image'" @click="generationMode = 'text-to-image'">
                 <span class="mode-icon">文</span>
-                <span class="mode-copy"><strong>文生图</strong><small>只输入文字，直接生成全新画面</small></span>
+              <div class="mode-copy">
+  <div class="title">文生图</div>
+  <div class="desc">只输入文字，直接生成全新画面</div>
+</div>
                 <span class="mode-check">✓</span>
               </button>
             </div>
@@ -639,6 +791,7 @@ function formatBytes(bytes: number) {
           </button>
         </section>
 
+<div class="result-column">
         <section class="preview-panel panel">
           <div class="panel-heading preview-heading">
             <div>
@@ -684,42 +837,45 @@ function formatBytes(bytes: number) {
           </div>
 
           <div class="model-summary">
-            <div><span>当前厂商</span><strong>{{ selectedModel?.providerName || '—' }}</strong></div>
+            <div><span>当前厂商</span><strong>{{ providerDisplayName(selectedModel?.provider, selectedModel?.providerName) }}</strong></div>
             <div><span>生成方式</span><strong>{{ generationMode === 'image-edit' ? '参考图生成' : '文生图' }}</strong></div>
             <div><span>输出规格</span><strong>{{ selectedSizeLabel }}</strong></div>
           </div>
         </section>
-      </div>
 
-      <section class="history-panel panel">
+        <section class="history-panel panel">
         <div class="history-heading">
           <div>
             <span class="step-number">03</span>
-            <div><h2>服务器生成历史</h2><p>生成完成后自动下载到服务器，刷新或更换浏览器仍可查看</p></div>
+            <div><h2>本机生成历史</h2><p>仅当前浏览器显示最近 20 条；所有记录由服务器完整归档</p></div>
           </div>
-          <button v-if="serverHistory.length" type="button" class="history-clear" @click="clearServerHistory">清空全部</button>
+          <button v-if="localHistory.length" type="button" class="history-clear" @click="clearLocalHistory">清空本机</button>
         </div>
 
-        <div v-if="historyLoading" class="history-empty">正在读取服务器历史…</div>
-        <div v-else-if="serverHistory.length" class="history-grid">
-          <article v-for="record in serverHistory" :key="record.id" class="history-card" :class="{ active: activeHistoryId === record.id }">
+        <div v-if="localHistory.length" class="history-grid">
+          <article v-for="record in localHistory" :key="record.id" class="history-card" :class="{ active: activeHistoryId === record.id }">
             <button type="button" class="history-thumb" @click="restoreHistory(record)">
               <img v-if="record.images[0]" :src="record.images[0].url" :alt="record.prompt" />
               <span v-if="record.images.length > 1">{{ record.images.length }} 张</span>
             </button>
             <div class="history-copy">
-              <div class="history-meta"><strong>{{ record.providerName }} · {{ record.model }}</strong><span>{{ formatHistoryDate(record.createdAt) }}</span></div>
+              <div class="history-meta">
+                <strong>{{ providerDisplayName(record.provider, record.providerName) }} · {{ record.model }}</strong>
+                <span>{{ formatHistoryDate(record.createdAt) }}</span>
+              </div>
               <p>{{ record.prompt }}</p>
               <small>{{ record.operation === 'image-edit' ? '参考图生成' : '文生图' }} · {{ formatSizeTitle(record.size) }}</small>
             </div>
             <div class="history-actions">
               <button type="button" @click="restoreHistory(record)">恢复</button>
-              <button type="button" class="danger" @click="deleteHistory(record)">删除</button>
+              <button type="button" class="danger" @click="deleteHistory(record)">从本机移除</button>
             </div>
           </article>
         </div>
-        <div v-else class="history-empty">还没有服务器历史。下一次生成成功后会自动保存。</div>
+        <div v-else class="history-empty">当前电脑还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到服务器。</div>
       </section>
-    </main>
+      </div>
+    </div>
+  </main>
   </div>
 </template>
