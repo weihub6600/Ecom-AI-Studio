@@ -1,78 +1,279 @@
 import dotenv from "dotenv";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createApp } from "./app/create-app.js";
-import { createAuthService } from "./auth.js";
-import { createAppDatabase } from "./db/database.js";
-import { migrateLegacyJsonData } from "./db/legacy-migration.js";
-import { createHistoryService } from "./history.js";
-import { startAsyncReconciliation } from "./services/async-reconciliation.js";
-import { createModelSettingsService } from "./services/model-settings.js";
-import { createAuditLogService } from "./services/audit-log.js";
-import { createAdminQueryService } from "./services/admin-query.js";
+import {
+  fileURLToPath
+} from "node:url";
+import {
+  createApp
+} from "./app/create-app.js";
+import {
+  createAuthService
+} from "./auth.js";
+import {
+  createAppDatabase
+} from "./db/database.js";
+import {
+  migrateLegacyJsonData
+} from "./db/legacy-migration.js";
+import {
+  createHistoryService
+} from "./history.js";
+import {
+  startAsyncReconciliation
+} from "./services/async-reconciliation.js";
+import {
+  createModelSettingsService
+} from "./services/model-settings.js";
+import {
+  createAuditLogService
+} from "./services/audit-log.js";
+import {
+  createAdminQueryService
+} from "./services/admin-query.js";
+import {
+  createHealthService
+} from "./services/health.js";
 
-export async function startServer(): Promise<void> {
-  const currentFile = fileURLToPath(import.meta.url);
-  const currentDir = path.dirname(currentFile);
-  const projectRoot = path.resolve(currentDir, "../..");
-  dotenv.config({ path: path.resolve(projectRoot, ".env") });
+export async function startServer():
+  Promise<void> {
+  const currentFile =
+    fileURLToPath(import.meta.url);
 
-  const port = Number(process.env.PORT || 8787);
-  const dataDir = path.resolve(projectRoot, process.env.IMAGE_STORAGE_DIR || "data");
-  const webDist = path.resolve(projectRoot, "web/dist");
-  const database = await createAppDatabase();
-  const migrationResult = await migrateLegacyJsonData(database, dataDir);
-  console.log(migrationResult.message);
+  const currentDir =
+    path.dirname(currentFile);
 
-  const modelSettingsService = createModelSettingsService(database);
-  const auditLogService = createAuditLogService(database);
-  const adminQueryService = createAdminQueryService(database);
+  const projectRoot =
+    path.resolve(
+      currentDir,
+      "../.."
+    );
 
-  const historyService = createHistoryService({
-    database,
-    dataDir,
-    maxRecords: Number(process.env.IMAGE_HISTORY_LIMIT || 0),
-    maxImageBytes: Number(process.env.IMAGE_MAX_DOWNLOAD_BYTES || 41_943_040),
-    downloadTimeoutMs: Number(process.env.IMAGE_DOWNLOAD_TIMEOUT_MS || 120_000)
-  });
-  const authService = createAuthService({
-    database,
-    sessionTtlSeconds: Number(process.env.AUTH_SESSION_TTL_SECONDS || 2_592_000),
-    adminUsername: process.env.ADMIN_USERNAME
-  });
-  await Promise.all([historyService.initialize(), authService.initialize(), modelSettingsService.initialize()]);
-
-  const stopReconciliation = startAsyncReconciliation(authService);
-  const app = createApp({
-    database,
-    authService,
-    historyService,
-    modelSettingsService,
-    auditLogService,
-    adminQueryService,
-    secureAuthCookie: process.env.AUTH_COOKIE_SECURE === "true",
-    webDist
-  });
-  const server = app.listen(port, () => {
-    console.log(`Ecom AI Studio API: http://localhost:${port}`);
-    console.log(`Generated images: ${historyService.generatedDir}`);
-    console.log(`MySQL data: ${authService.authFile}`);
-    if (!process.env.ADMIN_USERNAME) console.warn("ADMIN_USERNAME 未配置，无法自动创建或识别站长账号");
+  dotenv.config({
+    path:
+      path.resolve(
+        projectRoot,
+        ".env"
+      )
   });
 
-  let closing = false;
-  async function close(signal: string): Promise<void> {
-    if (closing) return;
-    closing = true;
-    console.log(`Received ${signal}, shutting down...`);
-    stopReconciliation();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await database.close().catch((error) => console.error("MySQL close error", error));
+  const port =
+    Number(
+      process.env.PORT ||
+      8787
+    );
+
+  const dataDir =
+    path.resolve(
+      projectRoot,
+      process.env
+        .IMAGE_STORAGE_DIR ||
+      "data"
+    );
+
+  const webDist =
+    path.resolve(
+      projectRoot,
+      "web/dist"
+    );
+
+  const secureAuthCookie =
+    process.env
+      .AUTH_COOKIE_SECURE ===
+    "true";
+
+  const database =
+    await createAppDatabase();
+
+  const migrationResult =
+    await migrateLegacyJsonData(
+      database,
+      dataDir
+    );
+
+  console.log(
+    migrationResult.message
+  );
+
+  const modelSettingsService =
+    createModelSettingsService(
+      database
+    );
+
+  const auditLogService =
+    createAuditLogService(
+      database
+    );
+
+  const adminQueryService =
+    createAdminQueryService(
+      database
+    );
+
+  const historyService =
+    createHistoryService({
+      database,
+      dataDir,
+      maxRecords:
+        Number(
+          process.env
+            .IMAGE_HISTORY_LIMIT ||
+          0
+        ),
+      maxImageBytes:
+        Number(
+          process.env
+            .IMAGE_MAX_DOWNLOAD_BYTES ||
+          41_943_040
+        ),
+      downloadTimeoutMs:
+        Number(
+          process.env
+            .IMAGE_DOWNLOAD_TIMEOUT_MS ||
+          120_000
+        )
+    });
+
+  const healthService =
+    createHealthService({
+      database,
+      generatedDir:
+        historyService.generatedDir,
+      secureCookie:
+        secureAuthCookie
+    });
+
+  const authService =
+    createAuthService({
+      database,
+      sessionTtlSeconds:
+        Number(
+          process.env
+            .AUTH_SESSION_TTL_SECONDS ||
+          2_592_000
+        ),
+      adminUsername:
+        process.env.ADMIN_USERNAME
+    });
+
+  await Promise.all([
+    historyService.initialize(),
+    authService.initialize(),
+    modelSettingsService.initialize()
+  ]);
+
+  const health =
+    await healthService.check();
+
+  console.log(
+    `启动健康状态：${health.status}`
+  );
+
+  console.log(
+    `MySQL 延迟：${health.mysql.latencyMs} 毫秒`
+  );
+
+  console.log(
+    `磁盘使用率：${health.storage.usedPercent}%`
+  );
+
+  if (health.status !== "ok") {
+    console.warn(
+      "服务器启动时发现健康预警",
+      JSON.stringify(health)
+    );
   }
 
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      void close(signal).finally(() => process.exit(0));
+  const stopReconciliation =
+    startAsyncReconciliation(
+      authService
+    );
+
+  const app =
+    createApp({
+      database,
+      authService,
+      historyService,
+      modelSettingsService,
+      auditLogService,
+      adminQueryService,
+      healthService,
+      secureAuthCookie,
+      webDist
     });
+
+  const server =
+    app.listen(
+      port,
+      () => {
+        console.log(
+          `Ecom AI Studio API：http://localhost:${port}`
+        );
+
+        console.log(
+          `生成图片目录：${historyService.generatedDir}`
+        );
+
+        console.log(
+          `MySQL 数据库：${authService.authFile}`
+        );
+
+        if (
+          !process.env
+            .ADMIN_USERNAME
+        ) {
+          console.warn(
+            "尚未配置 ADMIN_USERNAME，无法自动识别站长账号"
+          );
+        }
+      }
+    );
+
+  let closing = false;
+
+  async function close(
+    signal: string
+  ): Promise<void> {
+    if (closing) return;
+
+    closing = true;
+
+    console.log(
+      `收到 ${signal}，正在安全关闭服务器……`
+    );
+
+    stopReconciliation();
+
+    await new Promise<void>(
+      (resolve) => {
+        server.close(
+          () => resolve()
+        );
+      }
+    );
+
+    await database.close()
+      .catch((error) => {
+        console.error(
+          "关闭 MySQL 连接失败",
+          error
+        );
+      });
+  }
+
+  for (
+    const signal of [
+      "SIGINT",
+      "SIGTERM"
+    ] as const
+  ) {
+    process.once(
+      signal,
+      () => {
+        void close(signal)
+          .finally(
+            () => process.exit(0)
+          );
+      }
+    );
   }
 }

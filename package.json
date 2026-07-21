@@ -9,7 +9,11 @@
   "scripts": {
     "dev": "concurrently -k -n API,WEB -c auto \"npm run dev -w server\" \"npm run dev -w web\"",
     "build": "npm run build -w web && npm run build -w server",
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "health": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\health-check.ps1",
+    "backup:mysql": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\backup-mysql.ps1",
+    "security:check": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-sensitive-files.ps1",
+    "hooks:install": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-git-hooks.ps1"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

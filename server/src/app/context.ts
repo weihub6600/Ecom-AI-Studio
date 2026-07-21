@@ -4,6 +4,7 @@ import type { HistoryService } from "../history.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
 import type { AuditLogService } from "../services/audit-log.js";
 import type { AdminQueryService } from "../services/admin-query.js";
+import type { HealthService } from "../services/health.js";
 
 export interface AppContext {
   database: AppDatabase;
@@ -12,6 +13,7 @@ export interface AppContext {
   modelSettingsService: ModelSettingsService;
   auditLogService: AuditLogService;
   adminQueryService: AdminQueryService;
+  healthService: HealthService;
   secureAuthCookie: boolean;
   webDist: string;
 }
