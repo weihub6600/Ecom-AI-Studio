@@ -98,7 +98,18 @@ const providers = computed(() => {
 const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
 const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
 const sizeOptions = computed(() => (selectedModel.value?.sizes || []).map((value) => ({ value, title: formatSizeTitle(value) })));
-const selectedCreditCost = computed(() => selectedModel.value?.creditCost || 0);
+const selectedUnitCreditCost = computed(
+  () => selectedModel.value?.creditCost || 0
+);
+
+const selectedCreditCost = computed(() =>
+  Number(
+    (
+      selectedUnitCreditCost.value *
+      Math.max(1, count.value)
+    ).toFixed(2)
+  )
+);
 const hasEnoughCredits = computed(() => Boolean(
   !authUser.value ||
   authUser.value.role === "admin" ||
@@ -910,6 +921,40 @@ function formatBytes(bytes: number) {
             </template>
           </div>
 
+          <div
+            v-if="authUser"
+            class="generation-credit-bar"
+            :class="{ insufficient: !hasEnoughCredits }"
+          >
+            <span>
+              单张
+              <strong>
+                {{
+                  authUser.role === 'admin'
+                    ? '0'
+                    : formatPoints(selectedUnitCreditCost)
+                }}
+              </strong>
+              积分 × {{ count }} 张
+            </span>
+
+            <span>
+              {{
+                authUser.role === 'admin'
+                  ? '站长账号不限积分'
+                  : `预计消耗 ${formatPoints(selectedCreditCost)}，剩余 ${formatPoints(authUser.credits)} 积分`
+              }}
+            </span>
+
+            <button
+              v-if="authUser.role !== 'admin'"
+              type="button"
+              @click="userPanelOpen = true"
+            >
+              充值与明细
+            </button>
+          </div>
+
           <div class="field-block">
             <label>生成方式</label>
             <div class="mode-selector">
@@ -1016,11 +1061,7 @@ function formatBytes(bytes: number) {
             </div>
           </div>
 
-          <div v-if="authUser" class="generation-credit-bar" :class="{ insufficient: !hasEnoughCredits }">
-            <span>本次消耗 <strong>{{ authUser.role === 'admin' ? '0' : formatPoints(selectedCreditCost) }}</strong> 积分</span>
-            <span>{{ authUser.role === 'admin' ? '站长账号不限积分' : `剩余 ${formatPoints(authUser.credits)} 积分` }}</span>
-            <button v-if="authUser.role !== 'admin'" type="button" @click="userPanelOpen = true">充值与明细</button>
-          </div>
+
           <button class="generate-button" type="button" :disabled="!canGenerate" @click="generate">
             <span v-if="loading" class="spinner"></span>
             <span v-else class="spark-icon">✦</span>

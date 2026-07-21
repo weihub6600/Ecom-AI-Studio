@@ -295,6 +295,27 @@ app.post("/api/admin/cards", requireAuth, requireAdmin, async (request, response
   }
 });
 
+app.delete("/api/admin/cards/:id", requireAuth, requireAdmin, async (request, response) => {
+  try {
+    const actor = getAuthenticatedUser(request);
+    const cardId = readRouteParam(request.params.id);
+
+    if (!cardId) {
+      return response.status(400).json({
+        error: {
+          code: "INVALID_CARD_ID",
+          message: "缺少卡密 ID"
+        }
+      });
+    }
+
+    await authService.deleteUnusedRechargeCard(cardId, actor.id);
+    return response.json({ success: true });
+  } catch (error) {
+    return sendAuthError(response, error, "删除卡密失败");
+  }
+});
+
 app.use("/generated", requireAuth, express.static(historyService.generatedDir, {
   dotfiles: "deny",
   fallthrough: false,
@@ -385,7 +406,7 @@ app.post("/api/images/generate", requireAuth, async (request, response) => {
     const sizeError = validateModelSize(model, input.size);
     if (sizeError) return await rejectGeneration(response, usageInput, "INVALID_SIZE", sizeError);
 
-    const pointsCost = getModelCreditCost(model.provider, model.id);
+    const pointsCost = Number((getModelCreditCost(model.provider, model.id) * input.count).toFixed(2));
     reservation = await authService.reserveGenerationCredits(user.id, pointsCost, model.providerName, model.name);
 
     const result = await generateImage(input);

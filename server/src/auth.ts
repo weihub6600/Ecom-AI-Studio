@@ -560,6 +560,45 @@ export function createAuthService(options: AuthServiceOptions) {
     return data.rechargeCards.slice(0, clampLimit(limit)).map(toRechargeCardSummary);
   }
 
+  async function deleteUnusedRechargeCard(
+    cardId: string,
+    actorUserId: string
+  ): Promise<void> {
+    if (!cardId) {
+      throw new AuthError(400, "INVALID_CARD_ID", "缺少卡密 ID");
+    }
+
+    return withWriteLock(async () => {
+      const data = await readAuthData(authFile);
+      ensureAdmin(data, actorUserId);
+
+      const cardIndex = data.rechargeCards.findIndex(
+        (item) => item.id === cardId
+      );
+
+      if (cardIndex < 0) {
+        throw new AuthError(404, "CARD_NOT_FOUND", "卡密不存在");
+      }
+
+      const card = data.rechargeCards[cardIndex];
+
+      if (!card) {
+        throw new AuthError(404, "CARD_NOT_FOUND", "卡密不存在");
+      }
+
+      if (card.redeemedAt) {
+        throw new AuthError(
+          409,
+          "CARD_ALREADY_REDEEMED",
+          "已使用的卡密不能删除"
+        );
+      }
+
+      data.rechargeCards.splice(cardIndex, 1);
+      await atomicWriteJson(authFile, data);
+    });
+  }
+
   async function redeemRechargeCard(userId: string, codeInput: unknown): Promise<{ user: PublicUser; transaction: CreditTransaction }> {
     const normalizedCode = normalizeRechargeCode(codeInput);
     const codeHash = hashRechargeCode(normalizedCode);
@@ -729,6 +768,7 @@ export function createAuthService(options: AuthServiceOptions) {
     adjustCredits,
     generateRechargeCards,
     listRechargeCards,
+    deleteUnusedRechargeCard,
     redeemRechargeCard,
     reserveGenerationCredits,
     refundGenerationCredits,

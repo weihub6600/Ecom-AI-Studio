@@ -90,6 +90,7 @@ const cardLoading = ref(false);
 const cardPoints = ref("10");
 const cardQuantity = ref(1);
 const generatedCards = ref<RechargeCard[]>([]);
+const deletingCardId = ref<string | null>(null);
 
 const filteredUsers = computed(() => {
   const keyword = searchText.value.trim().toLocaleLowerCase("zh-CN");
@@ -277,8 +278,45 @@ async function generateCards() {
   }
 }
 
-async function copyGeneratedCards() {
-  const text = generatedCards.value.map((item) => `${item.code}\t${formatPoints(item.points)}积分`).join("\n");
+async function deleteCard(card: RechargeCard) {
+  if (card.status !== "unused") return;
+
+  const confirmed = window.confirm(
+    `确定删除未使用卡密 ${card.codePreview} 吗？删除后不可恢复。`
+  );
+
+  if (!confirmed) return;
+
+  deletingCardId.value = card.id;
+  errorMessage.value = "";
+  successMessage.value = "";
+
+  try {
+    await api(
+      `/api/admin/cards/${encodeURIComponent(card.id)}`,
+      { method: "DELETE" }
+    );
+
+    cards.value = cards.value.filter(
+      (item) => item.id !== card.id
+    );
+
+    generatedCards.value = generatedCards.value.filter(
+      (item) => item.id !== card.id
+    );
+
+    successMessage.value = "未使用卡密已删除";
+  } catch (error) {
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : "删除卡密失败";
+  } finally {
+    deletingCardId.value = null;
+  }
+}
+
+async function copyGeneratedCards() {  const text = generatedCards.value.map((item) => `${item.code}\t${formatPoints(item.points)}积分`).join("\n");
   if (!text) return;
   await navigator.clipboard.writeText(text);
   successMessage.value = "完整卡密已复制到剪贴板";
@@ -445,7 +483,58 @@ function formatFileTime(date: Date): string {
         <section class="admin-card-history">
           <div class="admin-card-list-heading"><div><strong>卡密记录</strong><span>{{ cards.length }} 张，未使用 {{ unusedCardCount }} 张</span></div><button type="button" @click="loadCards">刷新</button></div>
           <div v-if="cardLoading" class="admin-loading">正在读取卡密…</div>
-          <div v-else class="admin-card-table"><article v-for="card in cards" :key="card.id"><div><code>{{ card.codePreview }}</code><span :class="card.status">{{ card.status === 'unused' ? '未使用' : '已充值' }}</span></div><strong>{{ formatPoints(card.points) }} 积分</strong><p>生成：{{ formatDate(card.createdAt) }} · {{ card.createdBy }}</p><small v-if="card.redeemedAt">充值：{{ formatDate(card.redeemedAt) }} · {{ card.redeemedByUsername }}</small></article><div v-if="!cards.length" class="admin-empty large">暂无卡密记录</div></div>
+          <div v-else class="admin-card-table">
+            <article
+              v-for="card in cards"
+              :key="card.id"
+            >
+              <div>
+                <code>{{ card.codePreview }}</code>
+                <span :class="card.status">
+                  {{
+                    card.status === 'unused'
+                      ? '未使用'
+                      : '已充值'
+                  }}
+                </span>
+              </div>
+
+              <strong>
+                {{ formatPoints(card.points) }} 积分
+              </strong>
+
+              <p>
+                生成：{{ formatDate(card.createdAt) }}
+                · {{ card.createdBy }}
+              </p>
+
+              <small v-if="card.redeemedAt">
+                充值：{{ formatDate(card.redeemedAt) }}
+                · {{ card.redeemedByUsername }}
+              </small>
+
+              <button
+                v-if="card.status === 'unused'"
+                type="button"
+                class="admin-card-delete"
+                :disabled="deletingCardId === card.id"
+                @click="deleteCard(card)"
+              >
+                {{
+                  deletingCardId === card.id
+                    ? '删除中…'
+                    : '删除未使用卡密'
+                }}
+              </button>
+            </article>
+
+            <div
+              v-if="!cards.length"
+              class="admin-empty large"
+            >
+              暂无卡密记录
+            </div>
+          </div>
         </section>
       </div>
     </section>
@@ -453,3 +542,26 @@ function formatFileTime(date: Date): string {
 </template>
 
 <style src="./admin.css"></style>
+
+<style scoped>
+.admin-card-delete {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid #f0b6b6;
+  background: #fff5f5;
+  color: #b23b3b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.admin-card-delete:hover {
+  border-color: #df7777;
+  background: #fff0f0;
+}
+
+.admin-card-delete:disabled {
+  opacity: 0.55;
+}
+</style>
