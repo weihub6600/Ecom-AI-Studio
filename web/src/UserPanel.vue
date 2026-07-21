@@ -1,58 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { apiRequest } from "./api/client";
+import type { AuthUser, CreditRecord, PriceItem, UsageRecord } from "./types";
+import { formatDate, formatDuration, formatPoints } from "./utils/format";
 
-interface AccountUser {
-  id: string;
-  username: string;
-  role: "admin" | "user";
-  status: "pending" | "active" | "disabled" | "rejected";
-  createdAt: string;
-  approvedAt?: string;
-  lastLoginAt?: string;
-  credits: number;
-}
-
-interface UsageRecord {
-  id: string;
-  createdAt: string;
-  provider: string;
-  model: string;
-  operation: "text-to-image" | "image-edit";
-  size: string;
-  prompt?: string;
-  imageCount: number;
-  status: "success" | "submitted" | "failed";
-  durationMs?: number;
-  pointsCost?: number;
-  pointsRefunded?: boolean;
-  error?: string;
-}
-
-interface CreditRecord {
-  id: string;
-  createdAt: string;
-  type: "generation_charge" | "generation_refund" | "card_recharge" | "admin_adjustment";
-  amount: number;
-  balanceAfter: number;
-  note?: string;
-  provider?: string;
-  model?: string;
-}
-
-interface PriceItem {
-  provider: string;
-  model: string;
-  name: string;
-  points: number;
-}
-
-const props = defineProps<{ user: AccountUser }>();
+const props = defineProps<{ user: AuthUser }>();
 const emit = defineEmits<{
   close: [];
   balanceUpdated: [credits: number];
 }>();
 
-const account = ref<AccountUser>({ ...props.user });
+const account = ref<AuthUser>({ ...props.user });
 const prices = ref<PriceItem[]>([]);
 const usageRecords = ref<UsageRecord[]>([]);
 const creditRecords = ref<CreditRecord[]>([]);
@@ -70,21 +28,15 @@ const totalSpent = computed(() => creditRecords.value
 
 onMounted(loadAccountData);
 
-async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  const data = await response.json().catch(() => ({})) as T & { error?: { message?: string } };
-  if (!response.ok) throw new Error(data.error?.message || "操作失败");
-  return data;
-}
 
 async function loadAccountData() {
   loading.value = true;
   errorMessage.value = "";
   try {
     const [summary, usage, credits] = await Promise.all([
-      api<{ user: AccountUser; prices: PriceItem[] }>("/api/account/summary"),
-      api<{ records: UsageRecord[] }>("/api/account/usage?limit=300"),
-      api<{ records: CreditRecord[] }>("/api/account/credits?limit=500")
+      apiRequest<{ user: AuthUser; prices: PriceItem[] }>("/api/account/summary"),
+      apiRequest<{ records: UsageRecord[] }>("/api/account/usage?limit=300"),
+      apiRequest<{ records: CreditRecord[] }>("/api/account/credits?limit=500")
     ]);
     account.value = summary.user;
     prices.value = summary.prices || [];
@@ -108,7 +60,7 @@ async function redeemCard() {
   errorMessage.value = "";
   successMessage.value = "";
   try {
-    const result = await api<{ user: AccountUser }>("/api/account/redeem", {
+    const result = await apiRequest<{ user: AuthUser }>("/api/account/redeem", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code })
@@ -138,22 +90,6 @@ function transactionTitle(record: CreditRecord): string {
   return record.amount >= 0 ? "站长增加积分" : "站长扣减积分";
 }
 
-function formatPoints(value: number | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-function formatDate(value?: string): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function formatDuration(value?: number): string {
-  if (typeof value !== "number") return "—";
-  return `${(value / 1000).toFixed(1)} 秒`;
-}
 </script>
 
 <template>
@@ -205,7 +141,7 @@ function formatDuration(value?: number): string {
       <div class="user-center-price-list">
         <article v-for="item in prices" :key="`${item.provider}-${item.model}`">
           <span>{{ item.name }}</span>
-          <strong>{{ formatPoints(item.points) }} 积分/次</strong>
+          <strong>{{ formatPoints(item.points) }} 积分/张</strong>
         </article>
       </div>
 

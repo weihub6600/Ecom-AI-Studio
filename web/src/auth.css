@@ -314,3 +314,14 @@
 
 .auth-user-chip b{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:10px}.auth-user-chip small{flex:0 0 auto;padding-left:6px;border-left:1px solid #ececf2;color:#7364cf;font-size:8px;font-weight:900}.auth-top-button.account{border:1px solid #d8e7e2;background:linear-gradient(135deg,#f0fbf7,#edf5ff);color:#2d795e}.generation-credit-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 10px;padding:10px 12px;border:1px solid #dcd7fb;border-radius:11px;background:#f6f3ff;color:#686a7c;font-size:9px}.generation-credit-bar strong{color:#5747bf;font-size:12px}.generation-credit-bar button{border:0;background:transparent;color:#5b4bc4;font-size:9px;font-weight:850;text-decoration:underline}.generation-credit-bar.insufficient{border-color:#ffd2d2;background:#fff4f4;color:#a14444}.generation-credit-bar.insufficient strong{color:#a13e3e}
 @media(max-width:760px){.topbar-actions .auth-top-button.account{display:none}.generation-credit-bar{align-items:flex-start;flex-direction:column}}
+
+
+/* V7 模型区域内的积分和数量控制 */
+.generation-credit-bar { flex-wrap: wrap; justify-content: flex-start; font-size: 11px; }
+.generation-credit-bar strong { font-size: 13px; }
+.generation-credit-bar > span:nth-of-type(2) { flex: 1 1 240px; }
+.generation-credit-bar button { margin-left: auto; font-size: 11px; }
+.credit-count-control { display: inline-flex; align-items: center; gap: 7px; color: #686a7c; font-size: 11px; }
+.credit-count-control > span { white-space: nowrap; }
+.credit-count-control select { min-height: 32px; padding: 0 28px 0 9px; border: 1px solid #d8d3f4; border-radius: 8px; background: #fff; color: #4f45a7; font-size: 11px; font-weight: 750; }
+@media(max-width:760px){.generation-credit-bar{align-items:stretch}.credit-count-control{justify-content:space-between}.generation-credit-bar button{margin-left:0;align-self:flex-start}}

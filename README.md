@@ -1,200 +1,103 @@
-# Ecom AI Studio（百嘉瑞AI 比例修复版） · 百嘉瑞AI 专用版
+# Ecom AI Studio V10
 
-面向电商商品图的 AI 生图工作台。本版本仅接入 **百嘉瑞AI / GPT Image 2**，已移除 Mock、OpenAI、阿里云百炼和火山方舟等其他模型。
+面向电商商品图的 AI 生图工作台，支持多服务商、账号审核、按张积分计费、卡密充值、MySQL 历史归档和独立站长后台。
 
-## 已实现功能
+## 核心功能
 
 - Vue 3 + TypeScript + Vite 前端
 - Node.js + Express 服务端
-- 百嘉瑞AI `gpt-image-2`
-- 文生图和商品参考图生成
-- 多参考图上传
-- 画面比例、生成数量和提示词模板
-- 异步任务自动轮询
-- 进度、费用、错误信息展示
-- 生成结果预览和下载
-- API Key 仅保存在服务端
+- MySQL 8.4 或兼容版本
+- 百嘉瑞AI、GPT（GRSAI）与 Nano Banana
+- 文生图、参考图生成、多参考图上传
+- 按实际成功图片数量结算积分，失败或少出图片自动退款
+- 异步任务由服务器补查并自动结算
+- 用户审核、封禁、恢复、强制退出
+- 用户积分、卡密、使用记录和跨设备生成历史
+- 生成原图按用户权限隔离
 
-## 1. 环境要求
+## V10 独立站长后台
 
-- Node.js 20.19 或更高版本
-- npm 10 或更高版本
+站长登录后从前台点击“站长后台”，进入：
 
-```bash
-node -v
-npm -v
+```text
+/admin
 ```
 
-## 2. 安装依赖
+后台包含：
 
-在项目根目录执行：
+- 数据总览：用户、今日任务、图片、积分、历史和 7 天趋势
+- 用户管理：搜索、状态筛选、分页、审核、积分、登录和使用记录
+- 卡密管理：批量生成、状态筛选、分页、复制、导出和删除未使用卡密
+- 模型与价格：模型启停、单张积分价格和 API 配置状态
+- 操作审计：记录用户修改、积分调整、卡密操作和模型设置
 
-```bash
-npm install
-```
+## MySQL 配置
 
-## 3. 配置百嘉瑞AI
-
-Windows PowerShell：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-macOS / Linux：
-
-```bash
-cp .env.example .env
-```
-
-编辑根目录 `.env`：
+根目录 `.env`：
 
 ```env
-LINGKE_API_KEY=sk-xxxxxxxx
-LINGKE_BASE_URL=https://api.lk888.ai
-LINGKE_IMAGE_ENDPOINT=/v1/media/generate
-LINGKE_STATUS_ENDPOINT=/v1/media/status
-LINGKE_IMAGE_MODEL=gpt-image-2
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_DATABASE=ecom_ai_studio
+MYSQL_USER=root
+MYSQL_PASSWORD=你的MySQL密码
+MYSQL_CONNECTION_LIMIT=10
+MYSQL_AUTO_CREATE_DATABASE=true
+MYSQL_MIGRATE_JSON=true
+MYSQL_SSL=false
 ```
 
-不要把 `.env` 提交到 GitHub。
+## 安装与运行
 
-## 4. 本地运行
-
-```bash
+```powershell
+npm install
+npm run db:setup -w server
 npm run dev
 ```
 
-打开：
+前端：`http://localhost:5173`  
+独立站长后台：`http://localhost:5173/admin`  
+API 健康检查：`http://localhost:8787/api/health`
 
-- 前端：http://localhost:5173
-- API 健康检查：http://localhost:8787/api/health
+## 构建
 
-## 5. 构建与生产运行
-
-```bash
+```powershell
 npm run build
 npm start
 ```
 
-生产模式下，Express 服务端会托管 `web/dist`。
-
-## 接口流程
-
-1. 服务端调用 `POST /v1/media/generate` 创建任务。
-2. 接口返回 `task_id`。
-3. 前端每 2 秒查询本站任务接口。
-4. 本站服务端调用 `GET /v1/media/status?task_id=...`。
-5. 当 `is_final=true` 且 `state=success` 时，读取 `result_url` 并展示图片。
-
-## 项目结构
+## MySQL 数据表
 
 ```text
-Ecom-AI-Studio-Lingke-Only/
-├── web/
-├── server/
-│   └── src/
-│       ├── providers/lingke.ts
-│       ├── models.ts
-│       ├── router.ts
-│       └── index.ts
-├── .env.example
-├── package.json
-└── README.md
+app_users                 用户和积分余额
+app_sessions              登录会话
+app_login_records         登录记录
+app_usage_records         AI 使用与异步任务
+app_credit_transactions   积分流水
+app_recharge_cards        充值卡密
+app_history_records       生成历史
+app_history_images        历史图片及文件归属
+app_model_settings        模型启停与单张积分价格
+app_admin_audit_logs      站长操作审计
+app_schema_migrations     数据迁移状态
 ```
 
+V10 启动时会为现有模型自动补齐设置记录，不覆盖站长后来修改的启停状态和价格。
 
-## 生成质量
+## 关键目录
 
-页面支持 `auto`（自动，推荐）、`high`（高）、`medium`（中）和 `low`（低），并原样传递给百嘉瑞AI 的 `params.quality`。
+```text
+web/src/AdminApp.vue                    独立站长后台
+web/src/admin-page.css                  后台响应式样式
+web/src/App.vue                         创作工作台组合层
+web/src/components/                     前台组件
+web/src/api/client.ts                   统一 HTTP 客户端
+server/src/routes/admin.routes.ts       站长后台 API
+server/src/services/admin-query.ts      看板、分页和筛选查询
+server/src/services/model-settings.ts   模型启停与动态价格
+server/src/services/audit-log.ts        操作审计
+server/src/db/schema.ts                 MySQL 表结构
+server/src/server.ts                    服务初始化与优雅关闭
+```
 
-
-## 画面比例修复
-
-本版本不再同时发送 `aspect_ratio` 与 `size: auto`。服务端仅发送用户选择的 `aspect_ratio`，避免 `size` 参数覆盖画面比例。结果卡片会显示服务商实际返回图片的像素尺寸与真实宽高比，便于核验。
-
-
-## 本次更新
-
-- 将“画面比例”改为“输出尺寸”
-- 前端直接选择并提交百嘉瑞AI 支持的 `size` 枚举值
-- 后端不再提交 `aspect_ratio`，避免与实际出图比例不一致
-- 支持文生图与参考图生图
-
-
-## 界面增强
-
-- 新增“文生图 / 参考图生成”显式模式切换
-- 参考图模式会强制校验至少上传一张图片
-- 文生图模式默认使用 1024×1024，避免无参考图时使用 auto
-- 输出尺寸改为带比例预览的精致卡片选择器
-- 结果摘要显示当前生成方式和输出规格
-
-
-## 生成方式按钮优化
-
-- “文生图”和“参考图生成”改为并列卡片按钮
-- 增加选中态、悬停态、图标和勾选状态
-- 保持移动端单列展示
-
-
-## 尺寸卡片精简
-
-- 删除输出尺寸卡片中的灰色用途说明
-- 仅保留尺寸名称、接口像素值、比例图标和选中状态
-- 缩小卡片高度，使界面更紧凑
-
-
-## 界面调整
-
-- 删除“开始生成”按钮下方的 API Key 提示文字。
-
-
-## 预设按钮优化
-
-- 放大“高级棚拍、科技首屏、日式场景、白底精修”四个画面描述预设按钮
-- 增加按钮内边距、字号、圆角与悬停反馈
-
-
-## 顶栏标识更新
-
-- 版本标识：`BJR 0.1`
-- 外部链接：`517ZHE`，指向 `https://517zhe.com/`
-
-
-## 品牌更新
-
-左上角品牌文字已由 `Ecom AI / STUDIO` 更新为 `BJR AI / STUDIO`，原样式保持不变。
-
-
-## 本次界面调整
-
-- 放大结果区底部摘要栏标题和内容字号
-- 增加摘要栏高度与内边距，提高可读性
-
-
-## 自定义画面描述预设
-
-- 在预设按钮第一位新增“自定义”
-- 点击后自动清空画面描述并聚焦输入框
-
-
-## 本次界面调整
-
-- “参考图生成”调整到生成方式第一位
-- “文生图”调整到第二位
-- 生成逻辑与默认模式保持不变
-
-
-## 本次界面调整
-
-- 放大生成结果空状态标题与说明文字
-- 放大“主体保持 / 智能布光”浮动标签
-- 放大底部功能标签并增加留白
-- 保持原有布局、颜色和视觉结构不变
-
-
-## 顶部工作台标题放大
-
-- “百嘉瑞AI 电商视觉工作台”字号由 13px 调整为 18px
-- 同步提高字重并优化文字颜色，顶栏其他布局保持不变
+不要把 `.env`、`data/auth.json`、`data/history.json` 和 `data/generated` 提交到 GitHub。

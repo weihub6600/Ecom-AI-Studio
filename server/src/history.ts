@@ -1,8 +1,11 @@
 import { lookup } from "node:dns/promises";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import type { RowDataPacket } from "mysql2/promise";
+import type { AppDatabase } from "./db/database.js";
+import { mysqlDateToIso, withTransaction } from "./db/database.js";
 
 export type HistoryProviderId = "lingke" | "grsai" | "nanobanana";
 export type HistoryOperation = "text-to-image" | "image-edit";
@@ -50,6 +53,7 @@ export class HistoryValidationError extends Error {
 }
 
 interface HistoryServiceOptions {
+  database: AppDatabase;
   dataDir: string;
   /** 为兼容现有调用保留；当前版本始终永久保存，不自动清理历史记录。 */
   maxRecords?: number;
@@ -115,39 +119,46 @@ export function parseHistorySaveInput(value: unknown): HistorySaveInput {
 }
 
 export function createHistoryService(options: HistoryServiceOptions) {
+  const { pool } = options.database;
   const dataDir = path.resolve(options.dataDir);
   const generatedDir = path.join(dataDir, "generated");
-  const indexFile = path.join(dataDir, "history.json");
   const maxImageBytes = positiveIntegerOrDefault(options.maxImageBytes, DEFAULT_MAX_IMAGE_BYTES);
   const downloadTimeoutMs = positiveIntegerOrDefault(options.downloadTimeoutMs, DEFAULT_DOWNLOAD_TIMEOUT_MS);
   let writeQueue: Promise<void> = Promise.resolve();
 
   async function initialize(): Promise<void> {
     await mkdir(generatedDir, { recursive: true });
-    try {
-      await readFile(indexFile, "utf8");
-    } catch (error) {
-      if (isMissingFileError(error)) {
-        await atomicWriteJson(indexFile, []);
-        return;
-      }
-      throw error;
-    }
   }
 
   async function list(limit = 20, clientId?: string): Promise<StoredHistoryRecord[]> {
-    await writeQueue;
-    const records = await readRecords(indexFile);
-    const filtered = clientId ? records.filter((item) => item.clientId === clientId) : records;
     const safeLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 100);
-    return filtered.slice(0, safeLimit);
+    const values: unknown[] = [];
+    let ownerFilter = "";
+    if (clientId) {
+      ownerFilter = "AND (owner_user_id = ? OR client_id = ?)";
+      values.push(clientId, clientId);
+    }
+    values.push(safeLimit);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT h.*, i.id AS image_id, i.position_index, i.file_name, i.image_url,
+              i.width AS image_width, i.height AS image_height, i.mime_type
+       FROM (
+         SELECT * FROM app_history_records
+         WHERE deleted_at IS NULL ${ownerFilter}
+         ORDER BY created_at DESC
+         LIMIT ?
+       ) h
+       LEFT JOIN app_history_images i ON i.history_id = h.id
+       ORDER BY h.created_at DESC, i.position_index ASC`,
+      values
+    );
+    return groupHistoryRows(rows);
   }
 
   async function save(input: HistorySaveInput, context: HistoryRequestContext = {}): Promise<StoredHistoryRecord> {
     return withWriteLock(async () => {
       const id = randomUUID();
       const savedFiles: string[] = [];
-
       try {
         const images: HistoryImage[] = [];
         const timestamp = formatLocalDateTimeStamp(new Date());
@@ -157,10 +168,8 @@ export function createHistoryService(options: HistoryServiceOptions) {
         for (let index = 0; index < input.images.length; index += 1) {
           const source = input.images[index];
           if (!source) continue;
-
           const fileBaseName = `${ownerUsername}_${timestamp}_${String(nextSequence).padStart(3, "0")}`;
           nextSequence += 1;
-
           const stored = await downloadAndStoreImage(
             source.url,
             fileBaseName,
@@ -169,17 +178,11 @@ export function createHistoryService(options: HistoryServiceOptions) {
             downloadTimeoutMs
           );
           savedFiles.push(stored.fileName);
-          images.push({
-            ...source,
-            url: `/generated/${encodeURIComponent(stored.fileName)}`,
-            mimeType: stored.mimeType
-          });
+          images.push({ ...source, url: `/generated/${encodeURIComponent(stored.fileName)}`, mimeType: stored.mimeType });
         }
 
-        if (images.length === 0) {
-          throw new Error("没有可保存的生成图片");
-        }
-
+        if (images.length === 0) throw new Error("没有可保存的生成图片");
+        const createdAt = new Date();
         const record: StoredHistoryRecord = {
           provider: input.provider,
           providerName: input.providerName,
@@ -190,18 +193,57 @@ export function createHistoryService(options: HistoryServiceOptions) {
           durationMs: input.durationMs,
           cost: input.cost,
           id,
-          createdAt: new Date().toISOString(),
+          createdAt: createdAt.toISOString(),
           clientId: input.clientId,
           clientIp: normalizeAuditText(context.clientIp, 120),
           userAgent: normalizeAuditText(context.userAgent, 600),
           images
         };
 
-        const current = await readRecords(indexFile);
-        const combined = [record, ...current];
-
-        // 永久保存全部服务器历史：不再按数量截断，也不自动删除旧图片。
-        await atomicWriteJson(indexFile, combined);
+        await withTransaction(pool, async (connection) => {
+          const [ownerRows] = await connection.query<RowDataPacket[]>(
+            "SELECT id FROM app_users WHERE id = ? LIMIT 1",
+            [input.clientId]
+          );
+          const ownerUserId = ownerRows[0] ? input.clientId : null;
+          await connection.execute(
+            `INSERT INTO app_history_records
+              (id, owner_user_id, client_id, provider, provider_name, model, prompt, operation, size,
+               duration_ms, cost, created_at, client_ip, user_agent, deleted_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+            [
+              id,
+              ownerUserId,
+              input.clientId,
+              input.provider,
+              input.providerName,
+              input.model,
+              input.prompt,
+              input.operation,
+              input.size,
+              input.durationMs ?? null,
+              input.cost ?? null,
+              createdAt,
+              record.clientIp ?? null,
+              record.userAgent ?? null
+            ]
+          );
+          for (let index = 0; index < images.length; index += 1) {
+            const image = images[index];
+            if (!image) continue;
+            const fileName = extractGeneratedFileName(image.url);
+            if (!fileName) throw new Error("服务器图片文件名不正确");
+            await connection.execute(
+              `INSERT INTO app_history_images
+                (id, history_id, position_index, file_name, image_url, width, height, mime_type, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                randomUUID(), id, index, fileName, image.url,
+                image.width ?? null, image.height ?? null, image.mimeType ?? null, createdAt
+              ]
+            );
+          }
+        });
         return record;
       } catch (error) {
         await Promise.all(savedFiles.map((fileName) => rm(path.join(generatedDir, fileName), { force: true })));
@@ -211,24 +253,50 @@ export function createHistoryService(options: HistoryServiceOptions) {
   }
 
   async function remove(id: string, clientId?: string): Promise<boolean> {
-    return withWriteLock(async () => {
-      const records = await readRecords(indexFile);
-      const record = records.find((item) => item.id === id && (!clientId || item.clientId === clientId));
-      if (!record) return false;
-
-      // 网页删除仅移除 history.json 中的记录，服务器原图继续永久保留。
-      await atomicWriteJson(indexFile, records.filter((item) => item.id !== id));
-      return true;
-    });
+    const values: Array<string | number | Date | null> = [new Date(), id];
+    let ownerFilter = "";
+    if (clientId) {
+      ownerFilter = " AND (owner_user_id = ? OR client_id = ?)";
+      values.push(clientId, clientId);
+    }
+    const [result] = await pool.execute(
+      `UPDATE app_history_records SET deleted_at = ?
+       WHERE id = ? AND deleted_at IS NULL${ownerFilter}`,
+      values
+    );
+    return Number((result as { affectedRows?: number }).affectedRows || 0) > 0;
   }
 
   async function clear(clientId?: string): Promise<void> {
-    await withWriteLock(async () => {
-      // 只清除当前用户在网页中的历史记录；data/generated 中的服务器原图始终保留。
-      const records = await readRecords(indexFile);
-      const retained = clientId ? records.filter((item) => item.clientId !== clientId) : [];
-      await atomicWriteJson(indexFile, retained);
-    });
+    if (clientId) {
+      await pool.execute(
+        `UPDATE app_history_records SET deleted_at = ?
+         WHERE deleted_at IS NULL AND (owner_user_id = ? OR client_id = ?)`,
+        [new Date(), clientId, clientId]
+      );
+      return;
+    }
+    await pool.execute("UPDATE app_history_records SET deleted_at = ? WHERE deleted_at IS NULL", [new Date()]);
+  }
+
+  function resolveGeneratedFile(fileName: string): string | undefined {
+    const normalized = normalizeGeneratedFileName(fileName);
+    return normalized ? path.join(generatedDir, normalized) : undefined;
+  }
+
+  async function canAccessGeneratedFile(fileName: string, userId: string, isAdmin = false): Promise<boolean> {
+    const normalized = normalizeGeneratedFileName(fileName);
+    if (!normalized) return false;
+    if (isAdmin) return true;
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT i.id
+       FROM app_history_images i
+       INNER JOIN app_history_records h ON h.id = i.history_id
+       WHERE i.file_name = ? AND (h.owner_user_id = ? OR h.client_id = ?)
+       LIMIT 1`,
+      [normalized, userId, userId]
+    );
+    return rows.length > 0;
   }
 
   function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
@@ -244,8 +312,63 @@ export function createHistoryService(options: HistoryServiceOptions) {
     list,
     save,
     remove,
-    clear
+    clear,
+    resolveGeneratedFile,
+    canAccessGeneratedFile
   };
+}
+
+function groupHistoryRows(rows: RowDataPacket[]): StoredHistoryRecord[] {
+  const records = new Map<string, StoredHistoryRecord>();
+  for (const row of rows) {
+    const id = String(row.id);
+    let record = records.get(id);
+    if (!record) {
+      record = {
+        id,
+        createdAt: mysqlDateToIso(row.created_at) || new Date().toISOString(),
+        clientId: typeof row.client_id === "string" ? row.client_id : undefined,
+        clientIp: typeof row.client_ip === "string" ? row.client_ip : undefined,
+        userAgent: typeof row.user_agent === "string" ? row.user_agent : undefined,
+        provider: row.provider as HistoryProviderId,
+        providerName: String(row.provider_name),
+        model: String(row.model),
+        prompt: String(row.prompt),
+        operation: row.operation as HistoryOperation,
+        size: String(row.size),
+        durationMs: row.duration_ms === null ? undefined : Number(row.duration_ms),
+        cost: row.cost === null ? undefined : Number(row.cost),
+        images: []
+      };
+      records.set(id, record);
+    }
+    if (row.image_id) {
+      record.images.push({
+        url: String(row.image_url),
+        width: row.image_width === null ? undefined : Number(row.image_width),
+        height: row.image_height === null ? undefined : Number(row.image_height),
+        mimeType: typeof row.mime_type === "string" ? row.mime_type : undefined
+      });
+    }
+  }
+  return [...records.values()];
+}
+
+function normalizeGeneratedFileName(value: string): string | undefined {
+  const normalized = value.trim();
+  if (!normalized || normalized !== path.basename(normalized)) return undefined;
+  if (!/^[A-Za-z0-9_\-\u4e00-\u9fff]+\.(?:png|jpe?g|webp|gif)$/iu.test(normalized)) return undefined;
+  return normalized;
+}
+
+function extractGeneratedFileName(url: string): string | undefined {
+  try {
+    const pathname = new URL(url, "http://localhost").pathname;
+    const raw = pathname.split("/").pop();
+    return raw ? normalizeGeneratedFileName(decodeURIComponent(raw)) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function downloadAndStoreImage(
@@ -465,48 +588,6 @@ function extensionFromMimeType(mimeType: string): string {
   return "png";
 }
 
-async function readRecords(indexFile: string): Promise<StoredHistoryRecord[]> {
-  try {
-    const raw = await readFile(indexFile, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isStoredHistoryRecord) : [];
-  } catch (error) {
-    if (isMissingFileError(error)) return [];
-    if (error instanceof SyntaxError) {
-      const brokenFile = `${indexFile}.broken-${Date.now()}`;
-      await rename(indexFile, brokenFile);
-      await atomicWriteJson(indexFile, []);
-      return [];
-    }
-    throw error;
-  }
-}
-
-function isStoredHistoryRecord(value: unknown): value is StoredHistoryRecord {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Partial<StoredHistoryRecord>;
-  return (
-    typeof item.id === "string" &&
-    typeof item.createdAt === "string" &&
-    (item.clientId === undefined || typeof item.clientId === "string") &&
-    (item.clientIp === undefined || typeof item.clientIp === "string") &&
-    (item.userAgent === undefined || typeof item.userAgent === "string") &&
-    (item.provider === "lingke" || item.provider === "grsai" || item.provider === "nanobanana") &&
-    typeof item.model === "string" &&
-    typeof item.prompt === "string" &&
-    Array.isArray(item.images) &&
-    item.images.every((image) => Boolean(image && typeof image.url === "string"))
-  );
-}
-
-async function atomicWriteJson(filePath: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const tempFile = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tempFile, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(tempFile, filePath);
-}
-
-
 function asObject(value: unknown, message: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HistoryValidationError(message);
   return value as Record<string, unknown>;
@@ -571,3 +652,5 @@ function isMissingFileError(error: unknown): boolean {
 function formatMegabytes(bytes: number): string {
   return `${Math.round(bytes / 1024 / 1024)}MB`;
 }
+
+export type HistoryService = ReturnType<typeof createHistoryService>;

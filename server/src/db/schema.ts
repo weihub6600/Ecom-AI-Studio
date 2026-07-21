@@ -1,0 +1,185 @@
+export const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS app_schema_migrations (
+    migration_key VARCHAR(120) NOT NULL PRIMARY KEY,
+    applied_at DATETIME(3) NOT NULL,
+    details VARCHAR(500) NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_users (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    username VARCHAR(32) NOT NULL,
+    username_key VARCHAR(64) NOT NULL,
+    password_salt VARCHAR(128) NOT NULL,
+    password_hash VARCHAR(256) NOT NULL,
+    role ENUM('admin','user') NOT NULL DEFAULT 'user',
+    status ENUM('pending','active','disabled','rejected') NOT NULL DEFAULT 'pending',
+    created_at DATETIME(3) NOT NULL,
+    approved_at DATETIME(3) NULL,
+    last_login_at DATETIME(3) NULL,
+    credit_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    UNIQUE KEY uq_app_users_username_key (username_key),
+    KEY idx_app_users_status_created (status, created_at),
+    KEY idx_app_users_role (role)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_sessions (
+    token_hash CHAR(64) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    expires_at DATETIME(3) NOT NULL,
+    KEY idx_app_sessions_user (user_id),
+    KEY idx_app_sessions_expires (expires_at),
+    CONSTRAINT fk_app_sessions_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_login_records (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NULL,
+    username VARCHAR(32) NOT NULL,
+    success TINYINT(1) NOT NULL,
+    reason VARCHAR(300) NULL,
+    created_at DATETIME(3) NOT NULL,
+    client_ip VARCHAR(120) NULL,
+    user_agent VARCHAR(600) NULL,
+    KEY idx_app_login_user_created (user_id, created_at),
+    KEY idx_app_login_created (created_at),
+    CONSTRAINT fk_app_login_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_usage_records (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    username VARCHAR(32) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    provider VARCHAR(80) NOT NULL,
+    model VARCHAR(160) NOT NULL,
+    operation ENUM('text-to-image','image-edit') NOT NULL,
+    size VARCHAR(80) NOT NULL,
+    prompt TEXT NULL,
+    image_count INT UNSIGNED NOT NULL DEFAULT 0,
+    status ENUM('success','submitted','failed') NOT NULL,
+    duration_ms BIGINT UNSIGNED NULL,
+    cost DECIMAL(18,6) NULL,
+    request_id VARCHAR(200) NULL,
+    operation_id VARCHAR(200) NULL,
+    points_cost_cents BIGINT UNSIGNED NULL,
+    points_refunded TINYINT(1) NOT NULL DEFAULT 0,
+    error VARCHAR(800) NULL,
+    KEY idx_app_usage_user_created (user_id, created_at),
+    KEY idx_app_usage_status_created (status, created_at),
+    KEY idx_app_usage_request (user_id, request_id),
+    KEY idx_app_usage_operation (operation_id),
+    CONSTRAINT fk_app_usage_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_recharge_cards (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    code_hash CHAR(64) NOT NULL,
+    code_preview VARCHAR(80) NOT NULL,
+    credit_cents BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    created_by VARCHAR(32) NOT NULL,
+    redeemed_at DATETIME(3) NULL,
+    redeemed_by_user_id CHAR(36) NULL,
+    redeemed_by_username VARCHAR(32) NULL,
+    UNIQUE KEY uq_app_cards_code_hash (code_hash),
+    KEY idx_app_cards_created (created_at),
+    KEY idx_app_cards_redeemed (redeemed_at),
+    KEY idx_app_cards_redeemed_user (redeemed_by_user_id),
+    CONSTRAINT fk_app_cards_redeemed_user FOREIGN KEY (redeemed_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_credit_transactions (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    username VARCHAR(32) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    type ENUM('generation_charge','generation_refund','card_recharge','admin_adjustment') NOT NULL,
+    amount_cents BIGINT NOT NULL,
+    balance_after_cents BIGINT UNSIGNED NOT NULL,
+    note VARCHAR(300) NULL,
+    provider VARCHAR(80) NULL,
+    model VARCHAR(160) NULL,
+    reference_id VARCHAR(200) NULL,
+    card_id CHAR(36) NULL,
+    actor_user_id CHAR(36) NULL,
+    KEY idx_app_credit_user_created (user_id, created_at),
+    KEY idx_app_credit_reference (reference_id),
+    UNIQUE KEY uq_app_credit_type_reference (type, reference_id),
+    CONSTRAINT fk_app_credit_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_credit_card FOREIGN KEY (card_id) REFERENCES app_recharge_cards(id) ON DELETE SET NULL,
+    CONSTRAINT fk_app_credit_actor FOREIGN KEY (actor_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_history_records (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    owner_user_id CHAR(36) NULL,
+    client_id VARCHAR(160) NULL,
+    provider ENUM('lingke','grsai','nanobanana') NOT NULL,
+    provider_name VARCHAR(80) NOT NULL,
+    model VARCHAR(160) NOT NULL,
+    prompt TEXT NOT NULL,
+    operation ENUM('text-to-image','image-edit') NOT NULL,
+    size VARCHAR(80) NOT NULL,
+    duration_ms BIGINT UNSIGNED NULL,
+    cost DECIMAL(18,6) NULL,
+    created_at DATETIME(3) NOT NULL,
+    client_ip VARCHAR(120) NULL,
+    user_agent VARCHAR(600) NULL,
+    deleted_at DATETIME(3) NULL,
+    KEY idx_app_history_owner_created (owner_user_id, created_at),
+    KEY idx_app_history_client_created (client_id, created_at),
+    KEY idx_app_history_deleted (deleted_at),
+    CONSTRAINT fk_app_history_owner FOREIGN KEY (owner_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_history_images (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    history_id CHAR(36) NOT NULL,
+    position_index INT UNSIGNED NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    image_url VARCHAR(500) NOT NULL,
+    width INT UNSIGNED NULL,
+    height INT UNSIGNED NULL,
+    mime_type VARCHAR(120) NULL,
+    created_at DATETIME(3) NOT NULL,
+    UNIQUE KEY uq_app_history_image_file (file_name),
+    UNIQUE KEY uq_app_history_image_position (history_id, position_index),
+    KEY idx_app_history_images_history (history_id),
+    CONSTRAINT fk_app_history_images_history FOREIGN KEY (history_id) REFERENCES app_history_records(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_model_settings (
+    provider VARCHAR(40) NOT NULL,
+    model_id VARCHAR(160) NOT NULL,
+    display_name VARCHAR(160) NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    unit_credit_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    updated_by_user_id CHAR(36) NULL,
+    PRIMARY KEY (provider, model_id),
+    KEY idx_app_model_settings_enabled (enabled),
+    KEY idx_app_model_settings_updated (updated_at),
+    CONSTRAINT fk_app_model_settings_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_admin_audit_logs (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    actor_user_id CHAR(36) NULL,
+    actor_username VARCHAR(32) NOT NULL,
+    action VARCHAR(80) NOT NULL,
+    target_type VARCHAR(80) NOT NULL,
+    target_id VARCHAR(200) NULL,
+    summary VARCHAR(500) NOT NULL,
+    details_json JSON NULL,
+    client_ip VARCHAR(120) NULL,
+    user_agent VARCHAR(600) NULL,
+    created_at DATETIME(3) NOT NULL,
+    KEY idx_app_audit_created (created_at),
+    KEY idx_app_audit_actor_created (actor_user_id, created_at),
+    KEY idx_app_audit_action_created (action, created_at),
+    CONSTRAINT fk_app_audit_actor FOREIGN KEY (actor_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
+
+] as const;

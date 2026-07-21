@@ -1,66 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-
-interface AdminUserSummary {
-  id: string;
-  username: string;
-  role: "admin" | "user";
-  status: "pending" | "active" | "disabled" | "rejected";
-  createdAt: string;
-  approvedAt?: string;
-  lastLoginAt?: string;
-  credits: number;
-  loginCount: number;
-  usageCount: number;
-  lastLoginIp?: string;
-}
-
-interface LoginRecord {
-  id: string;
-  username: string;
-  success: boolean;
-  reason?: string;
-  createdAt: string;
-  clientIp?: string;
-  userAgent?: string;
-}
-
-interface UsageRecord {
-  id: string;
-  createdAt: string;
-  provider: string;
-  model: string;
-  operation: "text-to-image" | "image-edit";
-  size: string;
-  prompt?: string;
-  imageCount: number;
-  status: "success" | "submitted" | "failed";
-  durationMs?: number;
-  pointsCost?: number;
-  pointsRefunded?: boolean;
-  error?: string;
-}
-
-interface CreditRecord {
-  id: string;
-  createdAt: string;
-  type: "generation_charge" | "generation_refund" | "card_recharge" | "admin_adjustment";
-  amount: number;
-  balanceAfter: number;
-  note?: string;
-}
-
-interface RechargeCard {
-  id: string;
-  codePreview: string;
-  code?: string;
-  points: number;
-  createdAt: string;
-  createdBy: string;
-  redeemedAt?: string;
-  redeemedByUsername?: string;
-  status: "unused" | "redeemed";
-}
+import { apiRequest } from "./api/client";
+import type { AdminUserSummary, CreditRecord, LoginRecord, RechargeCard, UsageRecord } from "./types";
+import { formatDate, formatDuration, formatPoints } from "./utils/format";
 
 const props = defineProps<{ currentUserId: string }>();
 const emit = defineEmits<{
@@ -113,18 +55,12 @@ onMounted(async () => {
   await Promise.all([loadUsers(), loadCards()]);
 });
 
-async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  const data = await response.json().catch(() => ({})) as T & { error?: { message?: string } };
-  if (!response.ok) throw new Error(data.error?.message || "操作失败");
-  return data;
-}
 
 async function loadUsers() {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const data = await api<{ users: AdminUserSummary[] }>("/api/admin/users");
+    const data = await apiRequest<{ users: AdminUserSummary[] }>("/api/admin/users");
     users.value = data.users || [];
     for (const user of users.value) draftNames.value[user.id] = user.username;
     if (!selectedUserId.value && users.value.length) {
@@ -149,9 +85,9 @@ async function loadDetails(userId: string) {
   errorMessage.value = "";
   try {
     const [usage, logins, credits] = await Promise.all([
-      api<{ records: UsageRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/usage?limit=300`),
-      api<{ records: LoginRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/logins?limit=300`),
-      api<{ records: CreditRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/credits?limit=500`)
+      apiRequest<{ records: UsageRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/usage?limit=300`),
+      apiRequest<{ records: LoginRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/logins?limit=300`),
+      apiRequest<{ records: CreditRecord[] }>(`/api/admin/users/${encodeURIComponent(userId)}/credits?limit=500`)
     ]);
     usageRecords.value = usage.records || [];
     loginRecords.value = logins.records || [];
@@ -168,7 +104,7 @@ async function updateUser(user: AdminUserSummary, payload: { username?: string; 
   errorMessage.value = "";
   successMessage.value = "";
   try {
-    const data = await api<{ user: AdminUserSummary }>(`/api/admin/users/${encodeURIComponent(user.id)}`, {
+    const data = await apiRequest<{ user: AdminUserSummary }>(`/api/admin/users/${encodeURIComponent(user.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -212,7 +148,7 @@ async function adjustCredits(user: AdminUserSummary, direction: 1 | -1) {
   errorMessage.value = "";
   successMessage.value = "";
   try {
-    const data = await api<{ user: AdminUserSummary }>(`/api/admin/users/${encodeURIComponent(user.id)}/credits`, {
+    const data = await apiRequest<{ user: AdminUserSummary }>(`/api/admin/users/${encodeURIComponent(user.id)}/credits`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount: numeric * direction, note: adjustmentNote.value.trim() || `站长${verb}积分` })
@@ -232,7 +168,7 @@ async function forceLogout(user: AdminUserSummary) {
   if (!window.confirm(`确定强制退出用户“${user.username}”的全部登录设备吗？`)) return;
   actionLoadingId.value = user.id;
   try {
-    await api(`/api/admin/users/${encodeURIComponent(user.id)}/logout`, { method: "POST" });
+    await apiRequest(`/api/admin/users/${encodeURIComponent(user.id)}/logout`, { method: "POST" });
     successMessage.value = "该用户的全部登录会话已失效";
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "强制退出失败";
@@ -244,7 +180,7 @@ async function forceLogout(user: AdminUserSummary) {
 async function loadCards() {
   cardLoading.value = true;
   try {
-    const data = await api<{ cards: RechargeCard[] }>("/api/admin/cards?limit=500");
+    const data = await apiRequest<{ cards: RechargeCard[] }>("/api/admin/cards?limit=500");
     cards.value = data.cards || [];
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "读取卡密列表失败";
@@ -263,7 +199,7 @@ async function generateCards() {
   errorMessage.value = "";
   successMessage.value = "";
   try {
-    const data = await api<{ cards: RechargeCard[] }>("/api/admin/cards", {
+    const data = await apiRequest<{ cards: RechargeCard[] }>("/api/admin/cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ points, quantity: cardQuantity.value })
@@ -280,43 +216,24 @@ async function generateCards() {
 
 async function deleteCard(card: RechargeCard) {
   if (card.status !== "unused") return;
-
-  const confirmed = window.confirm(
-    `确定删除未使用卡密 ${card.codePreview} 吗？删除后不可恢复。`
-  );
-
-  if (!confirmed) return;
-
+  if (!window.confirm(`确定删除未使用卡密 ${card.codePreview} 吗？删除后不可恢复。`)) return;
   deletingCardId.value = card.id;
   errorMessage.value = "";
   successMessage.value = "";
-
   try {
-    await api(
-      `/api/admin/cards/${encodeURIComponent(card.id)}`,
-      { method: "DELETE" }
-    );
-
-    cards.value = cards.value.filter(
-      (item) => item.id !== card.id
-    );
-
-    generatedCards.value = generatedCards.value.filter(
-      (item) => item.id !== card.id
-    );
-
+    await apiRequest(`/api/admin/cards/${encodeURIComponent(card.id)}`, { method: "DELETE" });
+    cards.value = cards.value.filter((item) => item.id !== card.id);
+    generatedCards.value = generatedCards.value.filter((item) => item.id !== card.id);
     successMessage.value = "未使用卡密已删除";
   } catch (error) {
-    errorMessage.value =
-      error instanceof Error
-        ? error.message
-        : "删除卡密失败";
+    errorMessage.value = error instanceof Error ? error.message : "删除卡密失败";
   } finally {
     deletingCardId.value = null;
   }
 }
 
-async function copyGeneratedCards() {  const text = generatedCards.value.map((item) => `${item.code}\t${formatPoints(item.points)}积分`).join("\n");
+async function copyGeneratedCards() {
+  const text = generatedCards.value.map((item) => `${item.code}\t${formatPoints(item.points)}积分`).join("\n");
   if (!text) return;
   await navigator.clipboard.writeText(text);
   successMessage.value = "完整卡密已复制到剪贴板";
@@ -354,20 +271,6 @@ function creditTitle(record: CreditRecord): string {
   return record.amount >= 0 ? "站长增加积分" : "站长扣减积分";
 }
 
-function formatPoints(value: number | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-function formatDate(value?: string): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function formatDuration(value?: number): string {
-  return typeof value === "number" ? `${(value / 1000).toFixed(1)} 秒` : "—";
-}
 
 function formatFileTime(date: Date): string {
   return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}_${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
@@ -484,56 +387,16 @@ function formatFileTime(date: Date): string {
           <div class="admin-card-list-heading"><div><strong>卡密记录</strong><span>{{ cards.length }} 张，未使用 {{ unusedCardCount }} 张</span></div><button type="button" @click="loadCards">刷新</button></div>
           <div v-if="cardLoading" class="admin-loading">正在读取卡密…</div>
           <div v-else class="admin-card-table">
-            <article
-              v-for="card in cards"
-              :key="card.id"
-            >
-              <div>
-                <code>{{ card.codePreview }}</code>
-                <span :class="card.status">
-                  {{
-                    card.status === 'unused'
-                      ? '未使用'
-                      : '已充值'
-                  }}
-                </span>
-              </div>
-
-              <strong>
-                {{ formatPoints(card.points) }} 积分
-              </strong>
-
-              <p>
-                生成：{{ formatDate(card.createdAt) }}
-                · {{ card.createdBy }}
-              </p>
-
-              <small v-if="card.redeemedAt">
-                充值：{{ formatDate(card.redeemedAt) }}
-                · {{ card.redeemedByUsername }}
-              </small>
-
-              <button
-                v-if="card.status === 'unused'"
-                type="button"
-                class="admin-card-delete"
-                :disabled="deletingCardId === card.id"
-                @click="deleteCard(card)"
-              >
-                {{
-                  deletingCardId === card.id
-                    ? '删除中…'
-                    : '删除未使用卡密'
-                }}
+            <article v-for="card in cards" :key="card.id">
+              <div><code>{{ card.codePreview }}</code><span :class="card.status">{{ card.status === 'unused' ? '未使用' : '已充值' }}</span></div>
+              <strong>{{ formatPoints(card.points) }} 积分</strong>
+              <p>生成：{{ formatDate(card.createdAt) }} · {{ card.createdBy }}</p>
+              <small v-if="card.redeemedAt">充值：{{ formatDate(card.redeemedAt) }} · {{ card.redeemedByUsername }}</small>
+              <button v-if="card.status === 'unused'" type="button" class="admin-card-delete" :disabled="deletingCardId === card.id" @click="deleteCard(card)">
+                {{ deletingCardId === card.id ? '删除中…' : '删除未使用卡密' }}
               </button>
             </article>
-
-            <div
-              v-if="!cards.length"
-              class="admin-empty large"
-            >
-              暂无卡密记录
-            </div>
+            <div v-if="!cards.length" class="admin-empty large">暂无卡密记录</div>
           </div>
         </section>
       </div>
@@ -542,26 +405,3 @@ function formatFileTime(date: Date): string {
 </template>
 
 <style src="./admin.css"></style>
-
-<style scoped>
-.admin-card-delete {
-  margin-top: 10px;
-  width: 100%;
-  border: 1px solid #f0b6b6;
-  background: #fff5f5;
-  color: #b23b3b;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.admin-card-delete:hover {
-  border-color: #df7777;
-  background: #fff0f0;
-}
-
-.admin-card-delete:disabled {
-  opacity: 0.55;
-}
-</style>

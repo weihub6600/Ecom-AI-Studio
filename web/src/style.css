@@ -62,14 +62,16 @@ button:disabled { cursor: not-allowed; }
 
 .preview-panel {
   position: sticky;
-  top: 94px;
-  max-height: calc(100vh - 116px);
-  overflow-y: auto;
+  top: 88px;
+  height: calc(100vh - 108px);
+  min-height: 0;
+  overflow: hidden;
   padding: 25px;
-  min-height: 740px;
   display: flex;
   flex-direction: column;
 }
+.preview-panel .result-gallery,
+.preview-panel .generation-stage { min-height: 0; overflow-y: auto; }
 
 .result-column .history-panel {
   margin-top: 0;
@@ -387,7 +389,7 @@ textarea { resize: vertical; min-height: 128px; padding: 13px 14px; line-height:
 
 @media (max-width: 1120px) {
   .studio-grid { grid-template-columns: 1fr; }
-  .preview-panel { position: static; top: auto; max-height: none; overflow: visible; min-height: 680px; }
+  .preview-panel { position: static; top: auto; height: auto; max-height: none; overflow: visible; min-height: 680px; }
   .topbar-center { display: none; }
   .topbar { grid-template-columns: 1fr 1fr; }
 }
@@ -510,3 +512,15 @@ textarea { resize: vertical; min-height: 128px; padding: 13px 14px; line-height:
     font-size: 12px;
   }
 }
+
+/* V7 可读性统一：避免 8–10px 小字在 Windows 100% 缩放下难以辨认 */
+.panel-heading p, .history-heading p { font-size: 12px; }
+.field-block > label, .label-row label { font-size: 13px; }
+.label-row span, .operation-pill, .meta-row span { font-size: 11px; }
+.result-actions strong { font-size: 12px; }
+.result-actions span { font-size: 11px; }
+.result-actions button { font-size: 12px; padding: 8px 11px; }
+.history-meta strong { font-size: 12px; }
+.history-meta span, .history-copy small, .history-actions button { font-size: 11px; }
+.history-copy p { font-size: 12px; }
+.generation-credit-bar { line-height: 1.5; }

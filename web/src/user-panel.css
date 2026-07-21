@@ -13,3 +13,10 @@
 .user-center-records{display:flex;flex-direction:column;gap:9px;padding:14px 24px 24px}.user-center-record{padding:15px 16px;border:1px solid #e4e4ed;border-radius:13px;background:#fff}.user-center-record>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.user-center-record strong{color:#303144;font-size:12px}.user-center-record p{margin:7px 0;color:#737587;font-size:10px}.user-center-record footer{display:flex;flex-wrap:wrap;gap:14px;color:#9a9baa;font-size:9px}.user-center-record>small{display:block;margin-top:8px;color:#a84a4a;font-size:9px}.usage-state,.credit-plus,.credit-minus{padding:4px 8px;border-radius:999px;font-size:9px;font-weight:850}.usage-state.success{background:#eaf8f0;color:#26764f}.usage-state.submitted{background:#eef2ff;color:#5262b8}.usage-state.failed{background:#fff0f0;color:#a94242}.credit-plus{background:#eaf8f0;color:#23774e}.credit-minus{background:#fff0f0;color:#a53f3f}.user-center-empty{padding:35px;text-align:center;color:#9293a3;font-size:12px}
 @media(max-width:760px){.user-center-overlay{padding:0}.user-center-dialog{max-height:100vh;height:100vh;border-radius:0}.user-center-summary{grid-template-columns:1fr}.user-center-recharge{align-items:stretch;flex-direction:column}.user-center-recharge form{min-width:0}.user-center-price-list{grid-template-columns:repeat(2,minmax(0,1fr))}.user-center-header{padding:18px}.user-center-summary,.user-center-price-list,.user-center-records{padding-left:16px;padding-right:16px}.user-center-recharge{margin-left:16px;margin-right:16px}}
 .user-center-record blockquote{margin:7px 0;padding:7px 9px;border-left:2px solid #a69cec;background:#f7f5ff;color:#66687a;font-size:9px;line-height:1.55;white-space:pre-wrap}
+
+
+/* V7 用户后台可读性 */
+.user-center-header p, .user-center-profile small, .user-center-recharge span { font-size: 12px; }
+.user-center-price-list span, .user-center-price-list strong { font-size: 12px; }
+.user-center-tabs button { font-size: 12px; }
+.user-center-record > p, .user-center-record blockquote, .user-center-record footer, .user-center-record > small { font-size: 11px; }
