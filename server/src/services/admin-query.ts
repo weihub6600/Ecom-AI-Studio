@@ -160,6 +160,11 @@ export function createAdminQueryService(database: AppDatabase) {
     return page(rows.map(mapAudit), Number(countRows[0]?.total || 0), input);
   }
 
+  /**
+   * 注意：此方法仅用于内部分页查询，countSql 与 dataSql 必须为硬编码字符串，
+   * 严禁拼接任何用户输入（包括用户名、搜索词等）到 SQL 文本中。
+   * 所有动态值必须通过 baseParams 参数化传入。
+   */
   async function listSimple(
     countSql: string, dataSql: string, baseParams: unknown[], input: PageInput,
     mapper: (row: RowDataPacket) => Record<string, unknown>
