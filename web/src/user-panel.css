@@ -14,7 +14,6 @@
 @media(max-width:760px){.user-center-overlay{padding:0}.user-center-dialog{max-height:100vh;height:100vh;border-radius:0}.user-center-summary{grid-template-columns:1fr}.user-center-recharge{align-items:stretch;flex-direction:column}.user-center-recharge form{min-width:0}.user-center-price-list{grid-template-columns:repeat(2,minmax(0,1fr))}.user-center-header{padding:18px}.user-center-summary,.user-center-price-list,.user-center-records{padding-left:16px;padding-right:16px}.user-center-recharge{margin-left:16px;margin-right:16px}}
 .user-center-record blockquote{margin:7px 0;padding:7px 9px;border-left:2px solid #a69cec;background:#f7f5ff;color:#66687a;font-size:9px;line-height:1.55;white-space:pre-wrap}
 
-
 /* V7 用户后台可读性 */
 .user-center-header p, .user-center-profile small, .user-center-recharge span { font-size: 12px; }
 .user-center-price-list span, .user-center-price-list strong { font-size: 12px; }

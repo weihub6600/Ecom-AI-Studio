@@ -31,6 +31,8 @@ const props = defineProps<{
   isAuthenticated: boolean;
   operationLabel: string;
   providerSymbol: string;
+  generationProgress: number;
+  generationStatusText: string;
 }>();
 
 const emit = defineEmits<{
@@ -43,26 +45,36 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
 const dragging = ref(false);
+
 const promptTemplates = [
   "为上传的商品生成高级简约电商主图，浅色摄影棚背景，柔和自然投影，保持商品外观、包装文字、Logo、颜色和结构完全不变，主体居中，商业产品摄影，高级质感。",
   "生成清爽蓝白科技风电商首屏，加入柔和渐变、透明玻璃平台和克制的光效，商品保持真实比例和包装细节，画面干净，适合品牌官网。",
   "生成日式生活方式场景，原木桌面、自然窗光和浅色背景，商品作为视觉中心，构图留白，保持商品标签和包装不变。",
   "生成纯白背景商品效果图，修正光线和阴影，去除杂乱背景，不改变商品本体、形状、文字和Logo，适合电商平台白底主图。"
 ];
+
 const promptTemplateNames = ["高级棚拍", "科技首屏", "日式场景", "白底精修"];
 
-function openFileDialog() { fileInput.value?.click(); }
+function openFileDialog() {
+  fileInput.value?.click();
+}
+
 function onFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files || []);
   input.value = "";
   emit("filesSelected", files);
 }
+
 function onDrop(event: DragEvent) {
   dragging.value = false;
   emit("filesSelected", Array.from(event.dataTransfer?.files || []));
 }
-function useTemplate(template: string) { prompt.value = template; }
+
+function useTemplate(template: string) {
+  prompt.value = template;
+}
+
 async function useCustomPrompt() {
   prompt.value = "";
   await nextTick();
@@ -73,77 +85,304 @@ async function useCustomPrompt() {
 <template>
   <section class="control-panel panel">
     <div class="panel-heading">
-      <div><span class="step-number">01</span><div><h2>创作设置</h2><p>选择 API 服务商、模型并描述需要生成的画面</p></div></div>
+      <div>
+        <span class="step-number">01</span>
+        <div>
+          <h2>创作设置</h2>
+          <p>选择 API 服务商、模型并描述需要生成的画面</p>
+        </div>
+      </div>
       <span class="operation-pill">{{ props.operationLabel }}</span>
     </div>
 
     <div class="field-block provider-field">
       <label>API 服务商</label>
       <div class="segmented provider-segmented">
-        <button v-for="provider in props.providers" :key="provider.id" type="button" :class="{ active: selectedProviderId === provider.id }" @click="selectedProviderId = provider.id">{{ provider.name }}</button>
+        <button
+          v-for="provider in props.providers"
+          :key="provider.id"
+          type="button"
+          :class="{ active: selectedProviderId === provider.id }"
+          @click="selectedProviderId = provider.id"
+        >
+          {{ provider.name }}
+        </button>
       </div>
     </div>
 
     <div class="field-block">
       <label for="model-select">AI 模型</label>
       <div v-if="props.modelLoading" class="skeleton-input"></div>
+
       <template v-else-if="props.selectedModel">
-        <select v-if="props.availableModels.length > 1" id="model-select" v-model="selectedModelId" class="select-control">
-          <option v-for="model in props.availableModels" :key="model.id" :value="model.id">{{ model.name }}</option>
+        <select
+          v-if="props.availableModels.length > 1"
+          id="model-select"
+          v-model="selectedModelId"
+          class="select-control"
+        >
+          <option v-for="model in props.availableModels" :key="model.id" :value="model.id">
+            {{ model.name }}
+          </option>
         </select>
-        <div class="model-card" :class="{ disabled: !props.selectedModel.configured }">
+
+        <div
+          class="model-card selected"
+          :class="{ disabled: !props.selectedModel.configured }"
+          aria-label="当前选中的 AI 模型"
+        >
           <div class="provider-symbol">{{ props.providerSymbol }}</div>
-          <div class="model-copy"><strong>{{ providerDisplayName(props.selectedModel.provider, props.selectedModel.providerName) }} · {{ props.selectedModel.name }}</strong><span>{{ displayProviderText(props.selectedModel.description) }}</span></div>
-          <span class="status-tag" :class="props.selectedModel.configured ? 'ready' : 'offline'">{{ props.selectedModel.configured ? '可用' : '需配置 Key' }}</span>
+          <div class="model-copy">
+            <strong>
+              {{ providerDisplayName(props.selectedModel.provider, props.selectedModel.providerName) }}
+              · {{ props.selectedModel.name }}
+            </strong>
+            <span>{{ displayProviderText(props.selectedModel.description) }}</span>
+          </div>
+          <span class="model-selected-check" aria-hidden="true">✓</span>
+          <span class="status-tag" :class="props.selectedModel.configured ? 'ready' : 'offline'">
+            {{ props.selectedModel.configured ? "已选 · 可用" : "已选 · 需配置 Key" }}
+          </span>
         </div>
       </template>
     </div>
 
-    <div v-if="props.authUser" class="generation-credit-bar" :class="{ insufficient: !props.hasEnoughCredits }">
-      <span>单张 <strong>{{ props.authUser.role === 'admin' ? '0' : formatPoints(props.selectedUnitCreditCost) }}</strong> 积分</span>
-      <label class="credit-count-control"><span>生成数量</span><select v-model.number="count" aria-label="生成数量"><option v-for="item in props.selectedModel?.maxOutputImages || 1" :key="item" :value="item">{{ item }} 张</option></select></label>
-      <span>{{ props.authUser.role === 'admin' ? '站长账号不限积分' : `预计消耗 ${formatPoints(props.selectedCreditCost)}，剩余 ${formatPoints(props.authUser.credits)} 积分` }}</span>
-      <button v-if="props.authUser.role !== 'admin'" type="button" @click="emit('openUser')">充值与明细</button>
+    <div
+      v-if="props.authUser"
+      class="generation-credit-bar"
+      :class="{ insufficient: !props.hasEnoughCredits }"
+    >
+      <span>
+        单张
+        <strong>{{ props.authUser.role === "admin" ? "0" : formatPoints(props.selectedUnitCreditCost) }}</strong>
+        积分
+      </span>
+
+      <label class="credit-count-control">
+        <span>生成数量</span>
+        <select v-model.number="count" aria-label="生成数量">
+          <option
+            v-for="item in props.selectedModel?.maxOutputImages || 1"
+            :key="item"
+            :value="item"
+          >
+            {{ item }} 张
+          </option>
+        </select>
+      </label>
+
+      <span>
+        {{
+          props.authUser.role === "admin"
+            ? "站长账号不限积分"
+            : `预计消耗 ${formatPoints(props.selectedCreditCost)}，剩余 ${formatPoints(props.authUser.credits)} 积分`
+        }}
+      </span>
+
+      <button v-if="props.authUser.role !== 'admin'" type="button" @click="emit('openUser')">
+        充值与明细
+      </button>
     </div>
 
     <div class="field-block">
       <label>生成方式</label>
       <div class="mode-selector">
-        <button type="button" :class="{ active: generationMode === 'image-edit' }" :aria-pressed="generationMode === 'image-edit'" @click="generationMode = 'image-edit'">
-          <span class="mode-icon">图</span><div class="mode-copy"><div class="title">参考图生成</div><div class="desc">上传商品图，保留主体并重构场景</div></div><span class="mode-check">✓</span>
+        <button
+          type="button"
+          :class="{ active: generationMode === 'image-edit' }"
+          :aria-pressed="generationMode === 'image-edit'"
+          @click="generationMode = 'image-edit'"
+        >
+          <span class="mode-icon">图</span>
+          <div class="mode-copy">
+            <div class="title">参考图生成</div>
+            <div class="desc">上传商品图，保留主体并重构场景</div>
+          </div>
+          <span class="mode-check">✓</span>
         </button>
-        <button type="button" :class="{ active: generationMode === 'text-to-image' }" :aria-pressed="generationMode === 'text-to-image'" @click="generationMode = 'text-to-image'">
-          <span class="mode-icon">文</span><div class="mode-copy"><div class="title">文生图</div><div class="desc">只输入文字，直接生成全新画面</div></div><span class="mode-check">✓</span>
+
+        <button
+          type="button"
+          :class="{ active: generationMode === 'text-to-image' }"
+          :aria-pressed="generationMode === 'text-to-image'"
+          @click="generationMode = 'text-to-image'"
+        >
+          <span class="mode-icon">文</span>
+          <div class="mode-copy">
+            <div class="title">文生图</div>
+            <div class="desc">只输入文字，直接生成全新画面</div>
+          </div>
+          <span class="mode-check">✓</span>
         </button>
       </div>
     </div>
 
     <div v-if="generationMode === 'image-edit'" class="field-block reference-block">
-      <div class="label-row"><label>商品参考图</label><span>{{ props.uploads.length }}/{{ props.selectedModel?.maxReferenceImages || 0 }}</span></div>
-      <div class="drop-zone" :class="{ dragging, compact: props.uploads.length > 0 }" @dragenter.prevent="dragging = true" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false" @drop.prevent="onDrop" @click="openFileDialog">
-        <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden @change="onFileChange" />
-        <div class="upload-icon"><span></span></div><strong>{{ props.uploads.length ? '继续添加参考图' : '拖拽或点击上传商品图' }}</strong><small>JPG、PNG、WEBP，单张不超过 10MB</small>
+      <div class="label-row">
+        <label>商品参考图</label>
+        <span>{{ props.uploads.length }}/{{ props.selectedModel?.maxReferenceImages || 0 }}</span>
       </div>
-      <p v-if="props.uploads.length === 0" class="field-hint warning-hint">参考图生成模式至少需要上传 1 张图片。</p>
+
+      <div
+        class="drop-zone"
+        :class="{ dragging, compact: props.uploads.length > 0 }"
+        @dragenter.prevent="dragging = true"
+        @dragover.prevent="dragging = true"
+        @dragleave.prevent="dragging = false"
+        @drop.prevent="onDrop"
+        @click="openFileDialog"
+      >
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          hidden
+          @change="onFileChange"
+        />
+        <div class="upload-icon"><span></span></div>
+        <strong>{{ props.uploads.length ? "继续添加参考图" : "拖拽或点击上传商品图" }}</strong>
+        <small>JPG、PNG、WEBP，单张不超过 10MB</small>
+      </div>
+
+      <p v-if="props.uploads.length === 0" class="field-hint warning-hint">
+        参考图生成模式至少需要上传 1 张图片。
+      </p>
+
       <div v-if="props.uploads.length" class="upload-list">
-        <div v-for="image in props.uploads" :key="image.id" class="upload-item"><img :src="image.dataUrl" :alt="image.name" /><div><strong>{{ image.name }}</strong><span>{{ formatBytes(image.size) }}</span></div><button type="button" aria-label="删除图片" @click="emit('removeUpload', image.id)">×</button></div>
+        <div v-for="image in props.uploads" :key="image.id" class="upload-item">
+          <img :src="image.dataUrl" :alt="image.name" />
+          <div>
+            <strong>{{ image.name }}</strong>
+            <span>{{ formatBytes(image.size) }}</span>
+          </div>
+          <button type="button" aria-label="删除图片" @click="emit('removeUpload', image.id)">×</button>
+        </div>
       </div>
     </div>
 
-    <div v-else class="text-mode-tip"><span>✦</span><div><strong>当前为文生图模式</strong><p>无需上传图片。建议选择明确的固定尺寸，再描述主体、场景、构图和光线。</p></div></div>
+    <div v-else class="text-mode-tip">
+      <span>✦</span>
+      <div>
+        <strong>当前为文生图模式</strong>
+        <p>无需上传图片。建议选择明确的固定尺寸，再描述主体、场景、构图和光线。</p>
+      </div>
+    </div>
 
     <div class="field-block">
-      <div class="label-row"><label for="prompt">画面描述</label><span>{{ prompt.length }}/5000</span></div>
-      <textarea ref="promptInput" id="prompt" v-model="prompt" maxlength="5000" rows="6" placeholder="描述商品、背景、构图、光线和需要保留的细节"></textarea>
-      <div class="template-row"><button type="button" @click="useCustomPrompt">自定义</button><button v-for="(template, index) in promptTemplates" :key="index" type="button" @click="useTemplate(template)">{{ promptTemplateNames[index] }}</button></div>
+      <div class="label-row">
+        <label for="prompt">画面描述</label>
+        <span>{{ prompt.length }}/5000</span>
+      </div>
+      <textarea
+        ref="promptInput"
+        id="prompt"
+        v-model="prompt"
+        maxlength="5000"
+        rows="6"
+        placeholder="描述商品、背景、构图、光线和需要保留的细节"
+      ></textarea>
+
+      <div class="template-row">
+        <button type="button" @click="useCustomPrompt">自定义</button>
+        <button
+          v-for="(template, index) in promptTemplates"
+          :key="index"
+          type="button"
+          @click="useTemplate(template)"
+        >
+          {{ promptTemplateNames[index] }}
+        </button>
+      </div>
     </div>
 
-    <div v-if="props.selectedModel?.supportsNegativePrompt" class="field-block"><label for="negative-prompt">负面提示词</label><input id="negative-prompt" v-model="negativePrompt" type="text" placeholder="不希望出现的内容" /></div>
+    <div v-if="props.selectedModel?.supportsNegativePrompt" class="field-block">
+      <label for="negative-prompt">负面提示词</label>
+      <input
+        id="negative-prompt"
+        v-model="negativePrompt"
+        type="text"
+        placeholder="不希望出现的内容"
+      />
+    </div>
 
-    <div class="settings-grid" style="grid-template-columns: 1fr;"><div class="field-block size-block"><div class="label-row"><label>输出尺寸</label><span v-if="generationMode === 'text-to-image' && outputSize === 'auto'">文生图建议选固定尺寸</span></div><div class="size-grid"><button v-for="option in props.sizeOptions" :key="option.value" type="button" class="size-card" :class="{ active: outputSize === option.value }" @click="outputSize = option.value"><span class="size-preview" :data-size="option.value"><i></i></span><span class="size-copy"><strong>{{ option.title }}</strong><small>{{ option.value === 'auto' ? 'AUTO' : option.value }}</small></span><span class="size-check">✓</span></button></div></div></div>
+    <div class="settings-grid" style="grid-template-columns: 1fr;">
+      <div class="field-block size-block">
+        <div class="label-row">
+          <label>输出尺寸</label>
+          <span v-if="generationMode === 'text-to-image' && outputSize === 'auto'">
+            文生图建议选固定尺寸
+          </span>
+        </div>
 
-    <div v-if="props.selectedModel?.supportsSeed" class="settings-grid small-settings"><div class="field-block"><label for="seed">随机种子</label><input id="seed" v-model.number="seed" type="number" min="0" max="2147483647" placeholder="自动" /></div></div>
+        <div class="size-grid">
+          <button
+            v-for="option in props.sizeOptions"
+            :key="option.value"
+            type="button"
+            class="size-card"
+            :class="{ active: outputSize === option.value }"
+            :aria-pressed="outputSize === option.value"
+            @click="outputSize = option.value"
+          >
+            <span class="size-preview" :data-size="option.value"><i></i></span>
+            <span class="size-copy">
+              <strong>{{ option.title }}</strong>
+              <small>{{ option.value === "auto" ? "AUTO" : option.value }}</small>
+            </span>
+            <span class="size-check">✓</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
-    <button class="generate-button" type="button" :disabled="!props.canGenerate" @click="emit('generate')"><span v-if="props.loading" class="spinner"></span><span v-else class="spark-icon">✦</span>{{ props.loading ? '正在生成商业视觉…' : !props.isAuthenticated ? '登录后开始生成' : !props.hasEnoughCredits ? '积分不足，请先充值' : '开始生成' }}</button>
+    <div v-if="props.selectedModel?.supportsSeed" class="settings-grid small-settings">
+      <div class="field-block">
+        <label for="seed">随机种子</label>
+        <input id="seed" v-model.number="seed" type="number" min="0" max="2147483647" placeholder="自动" />
+      </div>
+    </div>
+
+    <div
+      v-if="props.loading"
+      class="generate-progress-card"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="generate-progress-head">
+        <span class="phase-pulse" aria-hidden="true"></span>
+        <strong>{{ props.generationStatusText }}</strong>
+        <span>{{ Math.round(props.generationProgress) }}%</span>
+      </div>
+      <div
+        class="generate-progress-track"
+        role="progressbar"
+        aria-label="图片生成进度"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="Math.round(props.generationProgress)"
+      >
+        <span :style="{ width: `${Math.round(props.generationProgress)}%` }"></span>
+      </div>
+    </div>
+
+    <button
+      class="generate-button"
+      type="button"
+      :disabled="!props.canGenerate"
+      @click="emit('generate')"
+    >
+      <span v-if="props.loading" class="spinner"></span>
+      <span v-else class="spark-icon">✦</span>
+      {{
+        props.loading
+          ? props.generationStatusText
+          : !props.isAuthenticated
+            ? "登录后开始生成"
+            : !props.hasEnoughCredits
+              ? "积分不足，请先充值"
+              : "开始生成"
+      }}
+    </button>
   </section>
 </template>
