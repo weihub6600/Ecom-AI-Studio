@@ -42,11 +42,6 @@ const currentPhaseIndex = computed(() => {
   return Math.max(0, phaseSteps.findIndex((step) => step.id === props.generationPhase));
 });
 
-const lightboxImage = computed(() => {
-  const index = props.lightboxIndex;
-  return index === null ? undefined : props.results[index];
-});
-
 function phaseState(index: number) {
   return {
     active: props.generationPhase !== "complete" && index === currentPhaseIndex.value,
@@ -158,7 +153,7 @@ onUnmounted(() => window.removeEventListener("keydown", handleLightboxKeydown));
           <span :style="{ width: `${Math.round(props.generationProgress)}%` }"></span>
         </div>
 
-        <small class="stage-progress-caption" style="font-size: 14px; line-height: 1.7;">
+        <small class="stage-progress-caption">
           进度为服务商状态与前端阶段估算的综合展示，实际完成时间可能因队列和图片尺寸而变化。
         </small>
       </div>
@@ -226,7 +221,7 @@ onUnmounted(() => window.removeEventListener("keydown", handleLightboxKeydown));
     <!-- Lightbox 放大预览 -->
     <Teleport to="body">
       <div
-        v-if="props.lightboxIndex !== null && lightboxImage"
+        v-if="props.lightboxIndex !== null"
         class="lightbox-overlay"
         @click.self="closeLightbox"
       >
@@ -245,13 +240,13 @@ onUnmounted(() => window.removeEventListener("keydown", handleLightboxKeydown));
         >&#8250;</button>
         <div class="lightbox-content">
           <img
-            :src="lightboxImage.url"
+            :src="props.results[props.lightboxIndex].url"
             :alt="`生成结果 ${props.lightboxIndex + 1}`"
           />
           <div class="lightbox-info">
             <span>方案 {{ String(props.lightboxIndex + 1).padStart(2, "0") }} / {{ props.results.length }}</span>
             <span v-if="props.resultDimensions[props.lightboxIndex]">{{ props.resultDimensions[props.lightboxIndex] }}</span>
-            <button type="button" @click="emit('download', lightboxImage, props.lightboxIndex)">下载原图</button>
+            <button type="button" @click="emit('download', props.results[props.lightboxIndex], props.lightboxIndex)">下载原图</button>
           </div>
         </div>
       </div>

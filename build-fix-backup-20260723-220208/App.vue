@@ -780,15 +780,16 @@ async function downloadAllZip() {
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
     const folder = zip.folder("ecom-ai-images")!;
+    let loaded = 0;
 
     for (let i = 0; i < results.value.length; i++) {
       const img = results.value[i];
-      if (!img) continue;
       const resp = await fetch(img.url);
       const blob = await resp.blob();
       const ext = extensionFromType(blob.type);
       const name = resolveDownloadFileName(img.url, i, blob.type);
       folder.file(name || `result_${String(i + 1).padStart(2, "0")}.${ext}`, blob);
+      loaded = i + 1;
     }
 
     const content = await zip.generateAsync({ type: "blob" });

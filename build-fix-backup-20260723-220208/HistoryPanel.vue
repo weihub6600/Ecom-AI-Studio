@@ -35,8 +35,8 @@ const filteredRecords = computed(() => {
     list = list.filter(
       (r) =>
         (r.prompt || "").toLowerCase().includes(q) ||
-        (r.operation || "").toLowerCase().includes(q) ||
-        (r.model || "").toLowerCase().includes(q) ||
+        (r.mode || r.operation || "").toLowerCase().includes(q) ||
+        (r.modelName || r.model || "").toLowerCase().includes(q) ||
         (r.size || "").toLowerCase().includes(q)
     );
   }

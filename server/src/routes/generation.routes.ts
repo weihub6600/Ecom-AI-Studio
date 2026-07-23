@@ -246,8 +246,8 @@ export function createGenerationRouter(options: {
               durationMs: result.durationMs,
               cost: result.cost,
               requestId:
-                result.requestId ||
-                result.taskId,
+                result.taskId ||
+                result.requestId,
               operationId:
                 reservation.operationId,
               pointsCost:
