@@ -101,8 +101,6 @@ export interface UsageRecord {
   durationMs?: number;
   pointsCost?: number;
   pointsRefunded?: boolean;
-  requestId?: string;
-  operationId?: string;
   error?: string;
 }
 

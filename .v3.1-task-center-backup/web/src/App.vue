@@ -7,7 +7,6 @@ import AuthDialog from "./components/AuthDialog.vue";
 import GenerationControls from "./components/GenerationControls.vue";
 import ResultPanel from "./components/ResultPanel.vue";
 import HistoryPanel from "./components/HistoryPanel.vue";
-import TaskCenter from "./components/TaskCenter.vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
   AuthUser,
@@ -17,8 +16,7 @@ import type {
   OutputSize,
   ProviderId,
   ServerHistoryRecord,
-  UploadImage,
-  UsageRecord
+  UploadImage
 } from "./types";
 import { formatSizeTitle, greatestCommonDivisor, providerDisplayName } from "./utils/format";
 
@@ -54,8 +52,6 @@ const authReady = ref(false);
 const authDialogOpen = ref(false);
 const authMode = ref<"login" | "register">("login");
 const userPanelOpen = ref(false);
-const taskRecords = ref<UsageRecord[]>([]);
-let taskRefreshTimer: number | undefined;
 const generationProgress = ref(0);
 const generationPhase = ref<GenerationPhase>("queue");
 let progressTimer: number | undefined;
@@ -155,10 +151,7 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 onMounted(async () => {
   await Promise.all([loadCurrentUser(), loadModels()]);
   syncIntroCollapsedState();
-  if (authUser.value) {
-    await Promise.all([loadHistory(true), loadTasks()]);
-    startTaskRefresh();
-  }
+  if (authUser.value) await loadHistory(true);
 });
 
 onUnmounted(() => {
@@ -187,8 +180,7 @@ async function handleAuthenticated(user: AuthUser) {
   authUser.value = user;
   authDialogOpen.value = false;
   syncIntroCollapsedState();
-  await Promise.all([loadHistory(true), loadTasks()]);
-  startTaskRefresh();
+  await loadHistory(true);
 }
 
 async function logout() {
@@ -200,8 +192,6 @@ async function logout() {
     authUser.value = null;
     userPanelOpen.value = false;
     historyRecords.value = [];
-    taskRecords.value = [];
-    stopTaskRefresh();
     activeHistoryId.value = null;
     results.value = [];
     resultDimensions.value = {};
@@ -385,70 +375,6 @@ async function loadModels() {
   } finally {
     modelLoading.value = false;
   }
-}
-
-async function loadTasks() {
-  if (!authUser.value) {
-    taskRecords.value = [];
-    return;
-  }
-  try {
-    const data = await apiRequest<{ records: UsageRecord[] }>("/api/account/usage?limit=50");
-    taskRecords.value = data.records || [];
-    if (taskRecords.value.some((record) => record.status === "submitted")) startTaskRefresh();
-    else stopTaskRefresh();
-  } catch (error) {
-    handleProtectedApiError(error, "读取生成任务失败");
-  }
-}
-
-function startTaskRefresh() {
-  if (taskRefreshTimer || !authUser.value) return;
-  taskRefreshTimer = window.setInterval(() => {
-    if (!document.hidden) void loadTasks();
-  }, 3000);
-}
-
-function stopTaskRefresh() {
-  if (!taskRefreshTimer) return;
-  window.clearInterval(taskRefreshTimer);
-  taskRefreshTimer = undefined;
-}
-
-async function retryUsageTask(record: UsageRecord) {
-  const model = models.value.find((item) => item.id === record.model);
-  if (model) {
-    selectedProviderId.value = model.provider;
-    await nextTick();
-    selectedModelId.value = model.id;
-  }
-  generationMode.value = record.operation;
-  prompt.value = record.prompt || prompt.value;
-  outputSize.value = record.size;
-  count.value = Math.max(1, record.imageCount || 1);
-  window.requestAnimationFrame(() =>
-    document.querySelector(".generation-panel")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    })
-  );
-}
-
-async function viewUsageTask(record: UsageRecord) {
-  let history = historyRecords.value.find((item) =>
-    item.model === record.model &&
-    item.prompt === (record.prompt || "") &&
-    Math.abs(new Date(item.createdAt).getTime() - new Date(record.createdAt).getTime()) < 10 * 60 * 1000
-  );
-  if (!history) {
-    await loadHistory(false);
-    history = historyRecords.value.find((item) =>
-      item.model === record.model &&
-      item.prompt === (record.prompt || "") &&
-      Math.abs(new Date(item.createdAt).getTime() - new Date(record.createdAt).getTime()) < 10 * 60 * 1000
-    );
-  }
-  if (history) await restoreHistory(history);
 }
 
 async function loadHistory(restoreLatest = false) {
@@ -657,9 +583,6 @@ async function generate() {
       handleBalanceUpdated(response.credits);
     }
 
-    await loadTasks();
-
-
     let result = response.result;
     updateProgressFromProvider(result.progress, result.status);
 
@@ -717,7 +640,6 @@ async function generate() {
     stopGenerationProgress();
     loading.value = false;
     pollingProgress.value = "";
-    await loadTasks();
   }
 }
 
@@ -965,14 +887,6 @@ async function downloadAllZip() {
             @download-all="downloadAllZip"
             @show-history="scrollToSection('history-panel')"
             @update:lightbox-index="lightboxIndex = $event"
-          />
-          <TaskCenter
-            :records="taskRecords"
-            :histories="historyRecords"
-            :authenticated="isAuthenticated"
-            @retry="retryUsageTask"
-            @view="viewUsageTask"
-            @refresh="loadTasks"
           />
           <HistoryPanel
             :records="historyRecords"
