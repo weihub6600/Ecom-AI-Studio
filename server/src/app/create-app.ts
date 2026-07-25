@@ -8,6 +8,9 @@ import { createAccountRouter } from "../routes/account.routes.js";
 import { createAdminRouter } from "../routes/admin.routes.js";
 import { createHistoryRouter } from "../routes/history.routes.js";
 import { createGenerationRouter } from "../routes/generation.routes.js";
+import { createBatchRouter } from "../routes/batch.routes.js";
+import { createLibraryRouter } from "../routes/library.routes.js";
+import { createWorkLibraryService } from "../services/work-library.js";
 
 export function createApp(context: AppContext): Express {
   const app = express();
@@ -16,6 +19,11 @@ export function createApp(context: AppContext): Express {
     requireAuth,
     requireAdmin
   } = createAuthMiddleware(context.authService);
+
+  const workLibraryService =
+    createWorkLibraryService(
+      context.database
+    );
 
   app.disable("x-powered-by");
 
@@ -58,18 +66,31 @@ export function createApp(context: AppContext): Express {
   }));
 
   app.use(createAccountRouter({
+    database: context.database,
     authService: context.authService,
     modelSettingsService: context.modelSettingsService,
     requireAuth
   }));
 
+  app.use(createLibraryRouter({
+    workLibraryService,
+    requireAuth
+  }));
+
   app.use(createAdminRouter({
+    database: context.database,
     authService: context.authService,
+    historyService: context.historyService,
     modelSettingsService: context.modelSettingsService,
     auditLogService: context.auditLogService,
     adminQueryService: context.adminQueryService,
     requireAuth,
     requireAdmin
+  }));
+
+  app.use(createBatchRouter({
+    batchJobService: context.batchJobService,
+    requireAuth
   }));
 
   app.use(createHistoryRouter({
@@ -78,8 +99,11 @@ export function createApp(context: AppContext): Express {
   }));
 
   app.use(createGenerationRouter({
+    database: context.database,
     authService: context.authService,
+    historyService: context.historyService,
     modelSettingsService: context.modelSettingsService,
+    batchWorkerSecret: context.batchJobService.workerSecret,
     requireAuth
   }));
 

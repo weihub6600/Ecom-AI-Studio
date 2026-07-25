@@ -6,6 +6,12 @@ export type GenerationOperation = "text-to-image" | "image-edit";
 export type UserRole = "admin" | "user";
 export type UserStatus = "pending" | "active" | "disabled" | "rejected";
 export type UsageStatus = "success" | "submitted" | "failed";
+export type GenerationTaskStatus =
+  | "queued"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
 export type CreditTransactionType = "generation_charge" | "generation_refund" | "card_recharge" | "admin_adjustment";
 
 export interface ModelCapability {
@@ -86,6 +92,74 @@ export interface ServerHistoryRecord {
   durationMs?: number;
   cost?: number;
   images: GeneratedImage[];
+}
+
+export interface GenerationTaskRequestSnapshot {
+  provider?: ProviderId;
+  model?: string;
+  operation?: GenerationOperation;
+  prompt?: string;
+  negativePrompt?: string;
+  size?: string;
+  count?: number;
+  seed?: number;
+}
+
+export interface GenerationTask {
+  id: string;
+  createdAt: string;
+  startedAt?: string;
+  updatedAt: string;
+  completedAt?: string;
+  provider: string;
+  model: string;
+  operation: GenerationOperation;
+  size: string;
+  prompt?: string;
+  status: GenerationTaskStatus;
+  stage: string;
+  progress: number;
+  requestedImageCount: number;
+  actualImageCount: number;
+  operationId?: string;
+  providerTaskId?: string;
+  historyId?: string;
+  reservedPoints?: number;
+  actualPoints?: number;
+  refundedPoints: number;
+  requestSnapshot?: GenerationTaskRequestSnapshot;
+  thumbnailUrl?: string;
+  providerProgress?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export type GenerationTaskStatusFilter =
+  | "all"
+  | "active"
+  | GenerationTaskStatus;
+
+export interface GenerationTaskPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface GenerationTaskSummary {
+  total: number;
+  active: number;
+  success: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface GenerationTaskQueryState {
+  status: GenerationTaskStatusFilter;
+  provider: "all" | ProviderId;
+  search: string;
+  page: number;
+  pageSize: number;
 }
 
 export interface UsageRecord {
@@ -187,4 +261,87 @@ export interface AdminAuditRecord {
   clientIp?: string;
   userAgent?: string;
   createdAt: string;
+}
+
+export type AdminTaskStatusFilter =
+  | "all"
+  | "active"
+  | "queued"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export interface AdminTaskRecord {
+  id: string;
+  userId: string;
+  username: string;
+  provider: string;
+  model: string;
+  operation:
+    | "text-to-image"
+    | "image-edit";
+  size: string;
+  prompt?: string;
+  status:
+    | "queued"
+    | "running"
+    | "success"
+    | "failed"
+    | "cancelled";
+  stage: string;
+  progress: number;
+  requestedImageCount: number;
+  actualImageCount: number;
+  providerTaskId?: string;
+  operationId?: string;
+  historyId?: string;
+  reservedPoints: number;
+  actualPoints: number;
+  refundedPoints: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs: number;
+  stale: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface AdminTaskPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminTaskSummary {
+  total: number;
+  active: number;
+  stale: number;
+  success24h: number;
+  failed24h: number;
+  refundedPoints24h: number;
+  averageDurationMs24h: number;
+}
+
+export interface AdminModelTaskHealth {
+  provider: string;
+  model: string;
+  total: number;
+  active: number;
+  success: number;
+  failed: number;
+  successRate: number;
+  averageDurationMs: number;
+  lastTaskAt?: string;
+}
+
+export interface TaskRecoveryStats {
+  scanned: number;
+  progressed: number;
+  completed: number;
+  failed: number;
+  errors: number;
 }

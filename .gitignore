@@ -27,3 +27,13 @@ logs/
 .server-history-backup-*/
 .history-backup-*/
 Ecom-AI-Studio-server-history-patch-*/
+
+# V12 local patch artifacts
+.v*-task-center-backup/
+.v*-task-lifecycle-backup/
+.v*-backup/
+build-fix-backup-*/
+apply-v*-*.js
+安装V*.cmd
+回滚V*.cmd
+README-V*.txt

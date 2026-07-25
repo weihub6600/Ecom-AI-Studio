@@ -33,6 +33,9 @@ import {
 import {
   createHealthService
 } from "./services/health.js";
+import {
+  createBatchJobService
+} from "./services/batch-jobs.js";
 
 export async function startServer():
   Promise<void> {
@@ -155,10 +158,18 @@ export async function startServer():
         process.env.ADMIN_USERNAME
     });
 
+  const batchJobService =
+    createBatchJobService({
+      database,
+      modelSettingsService,
+      baseUrl: `http://127.0.0.1:${port}`
+    });
+
   await Promise.all([
     historyService.initialize(),
     authService.initialize(),
-    modelSettingsService.initialize()
+    modelSettingsService.initialize(),
+    batchJobService.initialize()
   ]);
 
   const health =
@@ -185,7 +196,10 @@ export async function startServer():
 
   const stopReconciliation =
     startAsyncReconciliation(
-      authService
+      database,
+      authService,
+      historyService,
+      modelSettingsService
     );
 
   const app =
@@ -197,6 +211,7 @@ export async function startServer():
       auditLogService,
       adminQueryService,
       healthService,
+      batchJobService,
       secureAuthCookie,
       webDist
     });
@@ -228,6 +243,9 @@ export async function startServer():
       }
     );
 
+  const stopBatchWorker =
+    batchJobService.startWorker();
+
   let closing = false;
 
   async function close(
@@ -242,6 +260,7 @@ export async function startServer():
     );
 
     stopReconciliation();
+    stopBatchWorker();
 
     await new Promise<void>(
       (resolve) => {

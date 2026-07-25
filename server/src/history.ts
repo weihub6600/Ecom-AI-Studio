@@ -3,7 +3,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { RowDataPacket } from "mysql2/promise";
+import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { AppDatabase } from "./db/database.js";
 import { mysqlDateToIso, withTransaction } from "./db/database.js";
 
@@ -19,6 +19,7 @@ export interface HistoryImage {
 
 export interface HistorySaveInput {
   clientId: string;
+  generationTaskId?: string;
   provider: HistoryProviderId;
   providerName: string;
   model: string;
@@ -82,6 +83,10 @@ export function parseHistoryClientId(value: unknown): string {
 export function parseHistorySaveInput(value: unknown): HistorySaveInput {
   const body = asObject(value, "请求体格式不正确");
   const clientId = parseHistoryClientId(body.clientId);
+  const generationTaskId =
+    readOptionalGenerationTaskId(
+      body.generationTaskId
+    );
   const provider = readProvider(body.provider);
   const providerName = readRequiredString(body.providerName, "providerName", 80);
   const model = readRequiredString(body.model, "model", 160);
@@ -106,6 +111,7 @@ export function parseHistorySaveInput(value: unknown): HistorySaveInput {
 
   return {
     clientId,
+    generationTaskId,
     provider,
     providerName,
     model,
@@ -128,6 +134,10 @@ export function createHistoryService(options: HistoryServiceOptions) {
 
   async function initialize(): Promise<void> {
     await mkdir(generatedDir, { recursive: true });
+    await ensureGenerationTaskHistorySchema(
+      pool,
+      options.database.databaseName
+    );
   }
 
   async function list(limit = 20, clientId?: string): Promise<StoredHistoryRecord[]> {
@@ -155,8 +165,111 @@ export function createHistoryService(options: HistoryServiceOptions) {
     return groupHistoryRows(rows);
   }
 
+  async function getById(
+    id: string,
+    clientId?: string
+  ): Promise<
+    StoredHistoryRecord |
+    undefined
+  > {
+    const values: string[] = [
+      id
+    ];
+
+    let ownerFilter = "";
+
+    if (clientId) {
+      ownerFilter =
+        "AND (h.owner_user_id = ? OR h.client_id = ?)";
+
+      values.push(
+        clientId,
+        clientId
+      );
+    }
+
+    const [rows] =
+      await pool.query<
+        RowDataPacket[]
+      >(
+        `SELECT
+           h.*,
+           i.id AS image_id,
+           i.position_index,
+           i.file_name,
+           i.image_url,
+           i.width AS image_width,
+           i.height AS image_height,
+           i.mime_type
+         FROM app_history_records h
+         LEFT JOIN app_history_images i
+           ON i.history_id = h.id
+         WHERE
+           h.id = ?
+           AND h.deleted_at IS NULL
+           ${ownerFilter}
+         ORDER BY
+           i.position_index ASC`,
+        values
+      );
+
+    return groupHistoryRows(
+      rows
+    )[0];
+  }
+
+  async function getByGenerationTaskId(
+    generationTaskId: string,
+    clientId?: string
+  ): Promise<StoredHistoryRecord | undefined> {
+    const values: string[] = [
+      generationTaskId
+    ];
+    let ownerFilter = "";
+
+    if (clientId) {
+      ownerFilter =
+        "AND (h.owner_user_id = ? OR h.client_id = ?)";
+      values.push(clientId, clientId);
+    }
+
+    const [rows] =
+      await pool.query<RowDataPacket[]>(
+        `SELECT
+           h.*,
+           i.id AS image_id,
+           i.position_index,
+           i.file_name,
+           i.image_url,
+           i.width AS image_width,
+           i.height AS image_height,
+           i.mime_type
+         FROM app_history_records h
+         LEFT JOIN app_history_images i
+           ON i.history_id = h.id
+         WHERE
+           h.generation_task_id = ?
+           AND h.deleted_at IS NULL
+           ${ownerFilter}
+         ORDER BY i.position_index ASC`,
+        values
+      );
+
+    return groupHistoryRows(rows)[0];
+  }
+
   async function save(input: HistorySaveInput, context: HistoryRequestContext = {}): Promise<StoredHistoryRecord> {
     return withWriteLock(async () => {
+      if (input.generationTaskId) {
+        const existing =
+          await getByGenerationTaskId(
+            input.generationTaskId,
+            input.clientId
+          );
+
+        if (existing) return existing;
+      }
+
       const id = randomUUID();
       const savedFiles: string[] = [];
       try {
@@ -195,6 +308,8 @@ export function createHistoryService(options: HistoryServiceOptions) {
           id,
           createdAt: createdAt.toISOString(),
           clientId: input.clientId,
+          generationTaskId:
+            input.generationTaskId,
           clientIp: normalizeAuditText(context.clientIp, 120),
           userAgent: normalizeAuditText(context.userAgent, 600),
           images
@@ -208,13 +323,14 @@ export function createHistoryService(options: HistoryServiceOptions) {
           const ownerUserId = ownerRows[0] ? input.clientId : null;
           await connection.execute(
             `INSERT INTO app_history_records
-              (id, owner_user_id, client_id, provider, provider_name, model, prompt, operation, size,
+              (id, owner_user_id, client_id, generation_task_id, provider, provider_name, model, prompt, operation, size,
                duration_ms, cost, created_at, client_ip, user_agent, deleted_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
             [
               id,
               ownerUserId,
               input.clientId,
+              input.generationTaskId ?? null,
               input.provider,
               input.providerName,
               input.model,
@@ -310,6 +426,8 @@ export function createHistoryService(options: HistoryServiceOptions) {
     generatedDir,
     initialize,
     list,
+    getById,
+    getByGenerationTaskId,
     save,
     remove,
     clear,
@@ -328,6 +446,10 @@ function groupHistoryRows(rows: RowDataPacket[]): StoredHistoryRecord[] {
         id,
         createdAt: mysqlDateToIso(row.created_at) || new Date().toISOString(),
         clientId: typeof row.client_id === "string" ? row.client_id : undefined,
+        generationTaskId:
+          typeof row.generation_task_id === "string"
+            ? row.generation_task_id
+            : undefined,
         clientIp: typeof row.client_ip === "string" ? row.client_ip : undefined,
         userAgent: typeof row.user_agent === "string" ? row.user_agent : undefined,
         provider: row.provider as HistoryProviderId,
@@ -608,6 +730,38 @@ function readOptionalString(value: unknown, field: string, maxLength: number): s
   return value;
 }
 
+function readOptionalGenerationTaskId(
+  value: unknown
+): string | undefined {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new HistoryValidationError(
+      "generationTaskId 必须是字符串"
+    );
+  }
+
+  const normalized = value.trim();
+
+  if (
+    !/^[A-Za-z0-9-]{8,80}$/.test(
+      normalized
+    )
+  ) {
+    throw new HistoryValidationError(
+      "generationTaskId 格式不正确"
+    );
+  }
+
+  return normalized;
+}
+
 function readProvider(value: unknown): HistoryProviderId {
   if (value === "lingke" || value === "grsai" || value === "nanobanana") return value;
   throw new HistoryValidationError("provider 不正确");
@@ -640,6 +794,54 @@ function normalizeAuditText(value: string | undefined, maxLength: number): strin
   return normalized ? normalized.slice(0, maxLength) : undefined;
 }
 
+
+async function ensureGenerationTaskHistorySchema(
+  pool: Pool,
+  databaseName: string
+): Promise<void> {
+  const [columnRows] =
+    await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE
+         TABLE_SCHEMA = ?
+         AND TABLE_NAME = 'app_history_records'
+         AND COLUMN_NAME = 'generation_task_id'
+       LIMIT 1`,
+      [databaseName]
+    );
+
+  if (!columnRows[0]) {
+    await pool.query(
+      `ALTER TABLE app_history_records
+       ADD COLUMN generation_task_id
+         CHAR(36) NULL
+       AFTER client_id`
+    );
+  }
+
+  const [indexRows] =
+    await pool.query<RowDataPacket[]>(
+      `SELECT INDEX_NAME
+       FROM information_schema.STATISTICS
+       WHERE
+         TABLE_SCHEMA = ?
+         AND TABLE_NAME = 'app_history_records'
+         AND INDEX_NAME =
+           'uq_app_history_generation_task'
+       LIMIT 1`,
+      [databaseName]
+    );
+
+  if (!indexRows[0]) {
+    await pool.query(
+      `ALTER TABLE app_history_records
+       ADD UNIQUE KEY
+         uq_app_history_generation_task
+         (generation_task_id)`
+    );
+  }
+}
 
 function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;

@@ -18,7 +18,10 @@ import type {
   ProviderId,
   ServerHistoryRecord,
   UploadImage,
-  UsageRecord
+  GenerationTask,
+  GenerationTaskPagination,
+  GenerationTaskQueryState,
+  GenerationTaskSummary
 } from "./types";
 import { formatSizeTitle, greatestCommonDivisor, providerDisplayName } from "./utils/format";
 
@@ -54,8 +57,39 @@ const authReady = ref(false);
 const authDialogOpen = ref(false);
 const authMode = ref<"login" | "register">("login");
 const userPanelOpen = ref(false);
-const taskRecords = ref<UsageRecord[]>([]);
-let taskRefreshTimer: number | undefined;
+const taskRecords = ref<GenerationTask[]>([]);
+
+const taskPagination =
+  ref<GenerationTaskPagination>({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1
+  });
+
+const taskSummary =
+  ref<GenerationTaskSummary>({
+    total: 0,
+    active: 0,
+    success: 0,
+    failed: 0,
+    cancelled: 0
+  });
+
+const taskQuery =
+  ref<GenerationTaskQueryState>({
+    status: "all",
+    provider: "all",
+    search: "",
+    page: 1,
+    pageSize: 20
+  });
+
+let taskRefreshTimer:
+  number |
+  undefined;
+
+let lastHiddenTaskRefreshAt = 0;
 const generationProgress = ref(0);
 const generationPhase = ref<GenerationPhase>("queue");
 let progressTimer: number | undefined;
@@ -153,6 +187,10 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  window.addEventListener(
+    "keydown",
+    handleGlobalKeydown
+  );
   await Promise.all([loadCurrentUser(), loadModels()]);
   syncIntroCollapsedState();
   if (authUser.value) {
@@ -162,7 +200,12 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  window.removeEventListener("keydown", handleGlobalKeydown);
+  stopTaskRefresh();
+  stopGenerationProgress();
+  window.removeEventListener(
+    "keydown",
+    handleGlobalKeydown
+  );
 });
 
 async function loadCurrentUser() {
@@ -341,7 +384,7 @@ function updateProgressFromProvider(
   message?: string,
   status?: GenerationResult["status"]
 ) {
-  const match = message?.match(/(d{1,3}(?:.d+)?)s*%/);
+  const match = message?.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
   if (match) {
     const providerProgress = Math.min(99, Math.max(0, Number(match[1])));
     generationProgress.value = Math.max(
@@ -387,26 +430,164 @@ async function loadModels() {
   }
 }
 
-async function loadTasks() {
+async function loadTasks(
+  options: {
+    resetPage?: boolean;
+  } = {}
+) {
   if (!authUser.value) {
     taskRecords.value = [];
+    taskPagination.value = {
+      page: 1,
+      pageSize:
+        taskQuery.value
+          .pageSize,
+      total: 0,
+      totalPages: 1
+    };
+    taskSummary.value = {
+      total: 0,
+      active: 0,
+      success: 0,
+      failed: 0,
+      cancelled: 0
+    };
     return;
   }
-  try {
-    const data = await apiRequest<{ records: UsageRecord[] }>("/api/account/usage?limit=50");
-    taskRecords.value = data.records || [];
-    if (taskRecords.value.some((record) => record.status === "submitted")) startTaskRefresh();
-    else stopTaskRefresh();
-  } catch (error) {
-    handleProtectedApiError(error, "读取生成任务失败");
+
+  if (options.resetPage) {
+    taskQuery.value = {
+      ...taskQuery.value,
+      page: 1
+    };
   }
+
+  try {
+    const params =
+      new URLSearchParams({
+        page:
+          String(
+            taskQuery.value.page
+          ),
+        pageSize:
+          String(
+            taskQuery.value
+              .pageSize
+          ),
+        status:
+          taskQuery.value.status
+      });
+
+    if (
+      taskQuery.value.provider !==
+      "all"
+    ) {
+      params.set(
+        "provider",
+        taskQuery.value.provider
+      );
+    }
+
+    if (
+      taskQuery.value.search
+    ) {
+      params.set(
+        "search",
+        taskQuery.value.search
+      );
+    }
+
+    const data =
+      await apiRequest<{
+        tasks:
+          GenerationTask[];
+        pagination:
+          GenerationTaskPagination;
+        summary:
+          GenerationTaskSummary;
+      }>(
+        `/api/account/tasks?${params.toString()}`
+      );
+
+    taskRecords.value =
+      data.tasks || [];
+
+    taskPagination.value =
+      data.pagination;
+
+    taskSummary.value =
+      data.summary;
+
+    if (
+      data.pagination.page !==
+      taskQuery.value.page
+    ) {
+      taskQuery.value = {
+        ...taskQuery.value,
+        page:
+          data.pagination.page
+      };
+    }
+
+    if (
+      data.summary.active > 0
+    ) {
+      startTaskRefresh();
+    } else {
+      stopTaskRefresh();
+    }
+  } catch (error) {
+    handleProtectedApiError(
+      error,
+      "读取生成任务失败"
+    );
+  }
+}
+
+function handleTaskQueryChange(
+  query:
+    GenerationTaskQueryState
+) {
+  taskQuery.value = query;
+  void loadTasks({
+    resetPage: false
+  });
+}
+
+function handleTaskPageChange(
+  page: number
+) {
+  taskQuery.value = {
+    ...taskQuery.value,
+    page
+  };
+
+  void loadTasks({
+    resetPage: false
+  });
 }
 
 function startTaskRefresh() {
   if (taskRefreshTimer || !authUser.value) return;
-  taskRefreshTimer = window.setInterval(() => {
-    if (!document.hidden) void loadTasks();
-  }, 3000);
+  taskRefreshTimer =
+    window.setInterval(() => {
+      if (!document.hidden) {
+        void loadTasks();
+        return;
+      }
+
+      const now = Date.now();
+
+      if (
+        now -
+          lastHiddenTaskRefreshAt >=
+        15_000
+      ) {
+        lastHiddenTaskRefreshAt =
+          now;
+        void loadTasks();
+      }
+    }, 3000);
 }
 
 function stopTaskRefresh() {
@@ -415,40 +596,174 @@ function stopTaskRefresh() {
   taskRefreshTimer = undefined;
 }
 
-async function retryUsageTask(record: UsageRecord) {
-  const model = models.value.find((item) => item.id === record.model);
+async function retryUsageTask(
+  record: GenerationTask
+) {
+  const snapshot =
+    record.requestSnapshot || {};
+
+  const provider =
+    snapshot.provider;
+  const modelId =
+    snapshot.model || record.model;
+
+  if (
+    provider === "lingke" ||
+    provider === "grsai" ||
+    provider === "nanobanana"
+  ) {
+    selectedProviderId.value = provider;
+  }
+
+  await nextTick();
+
+  const model = models.value.find(
+    (item) => item.id === modelId
+  );
+
   if (model) {
     selectedProviderId.value = model.provider;
     await nextTick();
     selectedModelId.value = model.id;
   }
-  generationMode.value = record.operation;
-  prompt.value = record.prompt || prompt.value;
-  outputSize.value = record.size;
-  count.value = Math.max(1, record.imageCount || 1);
+
+  generationMode.value =
+    snapshot.operation === "text-to-image"
+      ? "text-to-image"
+      : record.operation;
+
+  prompt.value =
+    snapshot.prompt ||
+    record.prompt ||
+    prompt.value;
+
+  if (
+    typeof snapshot.negativePrompt ===
+    "string"
+  ) {
+    negativePrompt.value =
+      snapshot.negativePrompt;
+  }
+
+  outputSize.value =
+    snapshot.size ||
+    record.size;
+
+  count.value = Math.max(
+    1,
+    typeof snapshot.count === "number"
+      ? Math.trunc(snapshot.count)
+      : record.requestedImageCount || 1
+  );
+
+  seed.value =
+    typeof snapshot.seed === "number"
+      ? snapshot.seed
+      : undefined;
+
+  if (
+    generationMode.value === "image-edit" &&
+    record.thumbnailUrl
+  ) {
+    uploads.value = [{
+      id: `retry-${record.id}`,
+      name: "task-thumbnail.jpg",
+      mimeType:
+        record.thumbnailUrl.startsWith(
+          "data:image/png"
+        )
+          ? "image/png"
+          : "image/jpeg",
+      dataUrl: record.thumbnailUrl,
+      size: record.thumbnailUrl.length
+    }];
+  }
+
   window.requestAnimationFrame(() =>
-    document.querySelector(".generation-panel")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    })
+    document
+      .querySelector(".generation-panel")
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      })
   );
 }
 
-async function viewUsageTask(record: UsageRecord) {
-  let history = historyRecords.value.find((item) =>
-    item.model === record.model &&
-    item.prompt === (record.prompt || "") &&
-    Math.abs(new Date(item.createdAt).getTime() - new Date(record.createdAt).getTime()) < 10 * 60 * 1000
-  );
+async function viewUsageTask(
+  record: GenerationTask
+) {
+  let history =
+    record.historyId
+      ? historyRecords.value
+          .find(
+            (item) =>
+              item.id ===
+              record.historyId
+          )
+      : undefined;
+
+  if (
+    !history &&
+    record.historyId
+  ) {
+    try {
+      const detail =
+        await apiRequest<{
+          record:
+            ServerHistoryRecord;
+        }>(
+          `/api/history/${encodeURIComponent(record.historyId)}`
+        );
+
+      history =
+        detail.record;
+
+      historyRecords.value = [
+        detail.record,
+        ...historyRecords.value
+          .filter(
+            (item) =>
+              item.id !==
+              detail.record.id
+          )
+      ].slice(
+        0,
+        HISTORY_LIMIT
+      );
+    } catch (error) {
+      handleProtectedApiError(
+        error,
+        "读取任务结果失败"
+      );
+      return;
+    }
+  }
+
   if (!history) {
-    await loadHistory(false);
-    history = historyRecords.value.find((item) =>
-      item.model === record.model &&
-      item.prompt === (record.prompt || "") &&
-      Math.abs(new Date(item.createdAt).getTime() - new Date(record.createdAt).getTime()) < 10 * 60 * 1000
+    history =
+      historyRecords.value.find(
+        (item) =>
+          item.model ===
+            record.model &&
+          item.prompt ===
+            (record.prompt || "") &&
+          Math.abs(
+            new Date(
+              item.createdAt
+            ).getTime() -
+            new Date(
+              record.createdAt
+            ).getTime()
+          ) <
+            10 * 60 * 1000
+      );
+  }
+
+  if (history) {
+    await restoreHistory(
+      history
     );
   }
-  if (history) await restoreHistory(history);
 }
 
 async function loadHistory(restoreLatest = false) {
@@ -465,7 +780,38 @@ async function loadHistory(restoreLatest = false) {
   }
 }
 
-async function saveGenerationToServer(meta: GenerationResult, generatedImages: GeneratedImage[]) {
+async function acceptSavedHistory(
+  record: ServerHistoryRecord,
+  meta: GenerationResult
+) {
+  historyRecords.value = [
+    record,
+    ...historyRecords.value.filter(
+      (item) =>
+        item.id !== record.id
+    )
+  ].slice(0, HISTORY_LIMIT);
+
+  activeHistoryId.value =
+    record.id;
+
+  results.value =
+    record.images;
+
+  generationMeta.value = {
+    ...meta,
+    images:
+      record.images
+  };
+
+  await loadTasks();
+}
+
+async function saveGenerationToServer(
+  meta: GenerationResult,
+  generatedImages: GeneratedImage[],
+  taskRecordId?: string
+) {
   try {
     const data = await apiRequest<{ record: ServerHistoryRecord }>("/api/history", jsonRequest({
       provider: meta.provider,
@@ -478,10 +824,21 @@ async function saveGenerationToServer(meta: GenerationResult, generatedImages: G
       cost: meta.cost,
       images: generatedImages
     }));
-    historyRecords.value = [data.record, ...historyRecords.value.filter((item) => item.id !== data.record.id)].slice(0, HISTORY_LIMIT);
-    activeHistoryId.value = data.record.id;
-    results.value = data.record.images;
-    generationMeta.value = { ...meta, images: data.record.images };
+    await acceptSavedHistory(
+      data.record,
+      meta
+    );
+
+    if (taskRecordId) {
+      await apiRequest<{ success: boolean }>(
+        `/api/account/tasks/${encodeURIComponent(taskRecordId)}/link-history`,
+        jsonRequest({
+          historyId: data.record.id
+        })
+      );
+    }
+
+    await loadTasks();
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     if (error instanceof ApiError && error.status === 401) {
@@ -623,10 +980,21 @@ async function generate() {
   const startedAt = Date.now();
 
   try {
+    const taskThumbnail =
+      generationMode.value === "image-edit" &&
+      uploads.value[0]
+        ? await createTaskThumbnail(
+            uploads.value[0].dataUrl
+          )
+        : undefined;
+
     const response = await apiRequest<{
       result: GenerationResult;
       credits?: number;
       pointsCost?: number;
+      taskRecordId?: string;
+      historyRecord?:
+        ServerHistoryRecord;
     }>(
       "/api/images/generate",
       jsonRequest({
@@ -649,7 +1017,8 @@ async function generate() {
         count: count.value,
         seed: selectedModel.value.supportsSeed
           ? seed.value
-          : undefined
+          : undefined,
+        taskThumbnail
       })
     );
 
@@ -660,14 +1029,37 @@ async function generate() {
     await loadTasks();
 
 
-    let result = response.result;
-    updateProgressFromProvider(result.progress, result.status);
+    let taskPayload: {
+      result: GenerationResult;
+      historyRecord?:
+        ServerHistoryRecord;
+    } = {
+      result:
+        response.result,
+      historyRecord:
+        response.historyRecord
+    };
+
+    let result =
+      taskPayload.result;
+
+    updateProgressFromProvider(
+      result.progress,
+      result.status
+    );
 
     if (
       (result.status === "pending" || result.status === "processing") &&
       result.taskId
     ) {
-      result = await pollGenerationTask(result, startedAt);
+      taskPayload =
+        await pollGenerationTask(
+          result,
+          startedAt
+        );
+
+      result =
+        taskPayload.result;
     }
 
     if (result.status === "failed") {
@@ -689,7 +1081,18 @@ async function generate() {
     results.value = result.images || [];
 
     if (results.value.length) {
-      await saveGenerationToServer(completedMeta, results.value);
+      if (taskPayload.historyRecord) {
+        await acceptSavedHistory(
+          taskPayload.historyRecord,
+          completedMeta
+        );
+      } else {
+        await saveGenerationToServer(
+          completedMeta,
+          results.value,
+          response.taskRecordId
+        );
+      }
     }
 
     await finishGenerationProgress();
@@ -724,7 +1127,10 @@ async function generate() {
 async function pollGenerationTask(
   initial: GenerationResult,
   startedAt: number
-): Promise<GenerationResult> {
+): Promise<{
+  result: GenerationResult;
+  historyRecord?: ServerHistoryRecord;
+}> {
   if (!initial.taskId) {
     throw new Error("异步任务缺少 task_id");
   }
@@ -742,6 +1148,8 @@ async function pollGenerationTask(
     const data = await apiRequest<{
       result: GenerationResult;
       credits?: number;
+      historyRecord?:
+        ServerHistoryRecord;
     }>(
       `/api/images/tasks/${encodeURIComponent(initial.provider)}/${encodeURIComponent(initial.taskId)}?model=${encodeURIComponent(initial.model)}`
     );
@@ -756,7 +1164,11 @@ async function pollGenerationTask(
     );
 
     if (data.result.status === "completed") {
-      return data.result;
+      return {
+        result: data.result,
+        historyRecord:
+          data.historyRecord
+      };
     }
 
     if (data.result.status === "failed") {
@@ -769,6 +1181,73 @@ async function pollGenerationTask(
   throw new Error(
     "生成任务等待超过 5 分钟，请稍后在服务商后台检查任务状态"
   );
+}
+
+async function createTaskThumbnail(
+  dataUrl: string
+): Promise<string | undefined> {
+  try {
+    const image =
+      await new Promise<HTMLImageElement>(
+        (resolve, reject) => {
+          const element = new Image();
+          element.onload = () =>
+            resolve(element);
+          element.onerror = () =>
+            reject(
+              new Error("缩略图读取失败")
+            );
+          element.src = dataUrl;
+        }
+      );
+
+    const maxSide = 320;
+    const scale = Math.min(
+      1,
+      maxSide /
+        Math.max(
+          image.naturalWidth,
+          image.naturalHeight
+        )
+    );
+
+    const canvas =
+      document.createElement("canvas");
+
+    canvas.width = Math.max(
+      1,
+      Math.round(
+        image.naturalWidth * scale
+      )
+    );
+
+    canvas.height = Math.max(
+      1,
+      Math.round(
+        image.naturalHeight * scale
+      )
+    );
+
+    const context =
+      canvas.getContext("2d");
+
+    if (!context) return undefined;
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    return canvas.toDataURL(
+      "image/jpeg",
+      0.78
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function sleep(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
@@ -970,9 +1449,14 @@ async function downloadAllZip() {
             :records="taskRecords"
             :histories="historyRecords"
             :authenticated="isAuthenticated"
+            :pagination="taskPagination"
+            :summary="taskSummary"
+            :query="taskQuery"
             @retry="retryUsageTask"
             @view="viewUsageTask"
             @refresh="loadTasks"
+            @query-change="handleTaskQueryChange"
+            @page-change="handleTaskPageChange"
           />
           <HistoryPanel
             :records="historyRecords"
