@@ -30,7 +30,7 @@ type GenerationPhase = "queue" | "analysis" | "creating" | "rendering" | "comple
 const DEFAULT_PROMPT = "为上传的商品生成高级简约电商主图，浅色摄影棚背景，柔和自然投影，保持商品外观、包装文字、Logo、颜色和结构完全不变，主体居中，商业产品摄影，高级质感。";
 const INTRO_COLLAPSED_STORAGE_KEY = "ecom-ai-studio:intro-collapsed";
 const FAVORITES_STORAGE_KEY = "ecom-ai-studio:favorites";
-const HISTORY_LIMIT = 20;
+const HISTORY_LIMIT = 3;
 
 const models = ref<ModelCapability[]>([]);
 const selectedProviderId = ref<ProviderId>("grsai");
@@ -265,6 +265,12 @@ function requireLogin(): boolean {
 
 function openAdminPage() {
   window.location.href = "/admin";
+}
+
+function openAccountPage(tab?: string) {
+  window.location.href = tab
+    ? `/account?tab=${encodeURIComponent(tab)}`
+    : "/account";
 }
 
 function syncIntroCollapsedState() {
@@ -1108,7 +1114,7 @@ async function generate() {
       }
 
       if (error.code === "INSUFFICIENT_CREDITS") {
-        userPanelOpen.value = true;
+        openAccountPage("credits");
       }
     }
 
@@ -1370,7 +1376,7 @@ async function downloadAllZip() {
       :user="authUser"
       @login="openAuthDialog('login')"
       @register="openAuthDialog('register')"
-      @open-user="userPanelOpen = true"
+      @open-user="openAccountPage()"
       @open-admin="openAdminPage"
       @logout="logout"
     />
@@ -1420,7 +1426,7 @@ async function downloadAllZip() {
           @files-selected="addFiles"
           @remove-upload="removeUpload"
           @generate="generate"
-          @open-user="userPanelOpen = true"
+          @open-user="openAccountPage()"
         />
 
         <div class="result-column">
@@ -1445,7 +1451,7 @@ async function downloadAllZip() {
             @show-history="scrollToSection('history-panel')"
             @update:lightbox-index="lightboxIndex = $event"
           />
-          <TaskCenter
+          <TaskCenter v-if="false"
             :records="taskRecords"
             :histories="historyRecords"
             :authenticated="isAuthenticated"
@@ -1472,6 +1478,12 @@ async function downloadAllZip() {
             @toggleFavorite="toggleFavorite"
             @update:filterMode="historyFilterMode = $event"
           />
+          <a
+            class="history-more-link"
+            href="/account?tab=history"
+          >
+            查看全部生成历史
+          </a>
         </div>
       </div>
     </main>

@@ -21,6 +21,9 @@ import {
 import type {
   ModelSettingsService
 } from "../services/model-settings.js";
+import type {
+  CustomProviderService
+} from "../services/custom-providers.js";
 import {
   generateImage,
   getImageTask
@@ -58,6 +61,7 @@ export function createGenerationRouter(options: {
   authService: AuthService;
   historyService: HistoryService;
   modelSettingsService: ModelSettingsService;
+  customProviderService: CustomProviderService;
   batchWorkerSecret?: string;
   requireAuth: RequestHandler;
 }): Router {
@@ -66,6 +70,7 @@ export function createGenerationRouter(options: {
     authService,
     historyService,
     modelSettingsService,
+    customProviderService,
     batchWorkerSecret,
     requireAuth
   } = options;
@@ -153,6 +158,10 @@ export function createGenerationRouter(options: {
 
         const runtimeModel =
           modelSettingsService.get(
+            input.provider,
+            input.model
+          ) ||
+          customProviderService.getRuntimeModel(
             input.provider,
             input.model
           );
@@ -315,7 +324,9 @@ export function createGenerationRouter(options: {
         );
 
         const result =
-          await generateImage(input);
+          customProviderService.hasProvider(input.provider)
+            ? await customProviderService.generate(input)
+            : await generateImage(input);
 
         const isPending =
           result.status === "pending" ||

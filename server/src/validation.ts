@@ -10,7 +10,7 @@ const imageSchema = z.object({
 });
 
 export const generateSchema = z.object({
-  provider: z.enum(["lingke", "grsai", "nanobanana"]),
+  provider: z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/, "服务商标识格式不正确"),
   model: z.string().min(1).max(160),
   operation: z.enum(["text-to-image", "image-edit"]),
   prompt: z.string().trim().min(2, "提示词至少需要 2 个字符").max(5000),

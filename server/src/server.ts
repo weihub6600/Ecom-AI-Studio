@@ -36,6 +36,9 @@ import {
 import {
   createBatchJobService
 } from "./services/batch-jobs.js";
+import {
+  createCustomProviderService
+} from "./services/custom-providers.js";
 
 export async function startServer():
   Promise<void> {
@@ -158,6 +161,11 @@ export async function startServer():
         process.env.ADMIN_USERNAME
     });
 
+  const customProviderService =
+    createCustomProviderService(
+      database
+    );
+
   const batchJobService =
     createBatchJobService({
       database,
@@ -168,6 +176,7 @@ export async function startServer():
   await Promise.all([
     historyService.initialize(),
     authService.initialize(),
+    customProviderService.initialize(),
     modelSettingsService.initialize(),
     batchJobService.initialize()
   ]);
@@ -212,6 +221,7 @@ export async function startServer():
       adminQueryService,
       healthService,
       batchJobService,
+      customProviderService,
       secureAuthCookie,
       webDist
     });

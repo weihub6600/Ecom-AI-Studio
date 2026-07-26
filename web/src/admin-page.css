@@ -9,3 +9,24 @@
 @media(max-width:1250px){.admin-v10-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.admin-v10-user-layout{grid-template-columns:1fr}.admin-v10-user-detail{position:static}.card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.admin-v10-sidebar{position:static;width:100%;height:auto;padding:14px}.admin-v10-sidebar nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}.admin-v10-sidebar nav button{grid-template-columns:1fr;text-align:center}.admin-v10-sidebar nav button>span{margin:auto}.admin-v10-sidebar nav button small{display:none}.admin-v10-sidebar-bottom{display:none}.admin-v10-main{margin-left:0;padding:0 16px 32px}.admin-v10-loading-bar{left:0}.admin-v10-dashboard-grid{grid-template-columns:1fr}.admin-v10-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.model-setting-grid{grid-template-columns:1fr}.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.generated-box>div:last-child{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.admin-v10-sidebar nav{grid-template-columns:repeat(3,minmax(0,1fr))}.admin-v10-topbar{height:74px}.admin-v10-account div{display:none}.admin-v10-metrics{grid-template-columns:1fr}.admin-v10-toolbar{align-items:stretch;flex-direction:column}.admin-v10-toolbar input,.admin-v10-toolbar select{width:100%}.admin-v10-toolbar>span{margin-left:0}.admin-v10-table-card{overflow:auto}.admin-v10-table-card table{min-width:700px}.card-generator{align-items:stretch;flex-direction:column}.card-generator>div:last-child{align-items:stretch;flex-direction:column}.card-generator input{width:100%}.card-grid,.generated-box>div:last-child{grid-template-columns:1fr}.model-setting-form{grid-template-columns:1fr}.model-setting-form label:last-child{justify-content:flex-start}}
+/* V13.5.5 admin visual upgrade */
+.admin-v10-shell{background:radial-gradient(circle at 78% 4%,rgba(117,95,221,.12),transparent 31%),#f3f5f9;font-size:15px}
+.admin-v10-sidebar{width:272px;padding:27px 20px;background:linear-gradient(180deg,#15172a,#20223c);box-shadow:16px 0 42px rgba(27,29,52,.12)}
+.admin-v10-main{margin-left:272px;padding:0 40px 52px}
+.admin-v10-topbar{height:100px}.admin-v10-topbar h1{font-size:30px}.admin-v10-topbar>div:first-child span{font-size:11px}
+.admin-v10-account strong{font-size:15px}.admin-v10-account small{font-size:11px}
+.admin-v10-sidebar nav button{padding:12px}.admin-v10-sidebar nav button strong{font-size:14px}.admin-v10-sidebar nav button small{font-size:11px}
+.admin-v10-card{border-radius:18px;box-shadow:0 14px 38px rgba(47,49,78,.07)}
+.admin-v10-metrics{gap:15px}.admin-v10-metrics article{padding:22px;border-radius:17px;background:linear-gradient(145deg,#fff,#faf9ff)}
+.admin-v10-metrics span{font-size:13px}.admin-v10-metrics strong{font-size:31px}.admin-v10-metrics small{font-size:11px}
+.admin-v10-card-title{padding:20px 21px}.admin-v10-card-title strong{font-size:17px}.admin-v10-card-title span{font-size:12px}
+.admin-v10-toolbar input,.admin-v10-toolbar select,.admin-v10-toolbar button{font-size:14px}
+.admin-v10-table-card th{padding:15px 17px;font-size:12px}.admin-v10-table-card td{padding:14px 17px;font-size:13px}
+.admin-v10-user-cell strong{font-size:14px}.admin-v10-user-cell small{font-size:11px}
+.status-chip{font-size:11px;padding:5px 10px}
+.admin-v10-user-detail{padding:21px}.admin-v10-profile h2{font-size:20px}.admin-v10-profile p{font-size:11px}
+.admin-v10-balance span,.admin-v10-form-block>label{font-size:12px}.admin-v10-balance small{font-size:11px}
+.admin-v10-form-block button,.action-row button,.admin-v10-tabs button{font-size:12px}
+.admin-v10-records strong{font-size:12px}.admin-v10-records p{font-size:11px}.admin-v10-records small{font-size:10px}
+.admin-v10-message{font-size:14px}
+@media(max-width:1100px){.admin-v10-sidebar{width:230px}.admin-v10-main{margin-left:230px;padding-left:22px;padding-right:22px}}

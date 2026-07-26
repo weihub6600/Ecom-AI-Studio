@@ -184,3 +184,24 @@ server/src/server.ts                    服务初始化与优雅关闭
 - 历史服务端批次可以复制为新草稿
 - 支持复制并立即重新生产全部商品
 - 重新生产会创建全新批次并按正常规则重新扣除积分
+
+## V13.4.1 安全基线加固
+
+- CSP、HSTS、X-Content-Type-Options、X-Frame-Options、Referrer-Policy 与 Permissions-Policy
+- 会话绑定 HMAC 签名 CSRF 令牌，Vue 请求自动附加并在失效时重试
+- 登录 IP 与账号双维度持久化限频，默认 5 次 / 15 分钟
+- 注册 IP 持久化限频，默认 5 次 / 小时
+- 普通 JSON 1MB、批次 5MB、生图 20MB 的分级请求体限制
+- Provider 错误统一脱敏，服务端详情自动隐藏密钥、Token、Cookie 与图片 Data URL
+- 反向代理 TRUST_PROXY 显式配置，默认不信任转发 IP
+- MySQL 安全事件与限频记录：app_security_events、app_security_rate_limits
+- 站长接口：/api/admin/security/summary、/api/admin/security/events
+
+## V13.5.5 独立后台与动态 API 服务商
+
+- 首页生成历史只显示最近 3 条
+- 用户后台改为 /account 独立页面
+- 前台不再显示生成任务中心
+- 站长后台字体和视觉层级升级
+- 站长可新增 OpenAI Images 兼容 API 服务商和模型
+- API Key 使用 AES-256-GCM 加密保存

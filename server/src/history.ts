@@ -7,7 +7,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { AppDatabase } from "./db/database.js";
 import { mysqlDateToIso, withTransaction } from "./db/database.js";
 
-export type HistoryProviderId = "lingke" | "grsai" | "nanobanana";
+export type HistoryProviderId = string;
 export type HistoryOperation = "text-to-image" | "image-edit";
 
 export interface HistoryImage {
@@ -762,9 +762,31 @@ function readOptionalGenerationTaskId(
   return normalized;
 }
 
-function readProvider(value: unknown): HistoryProviderId {
-  if (value === "lingke" || value === "grsai" || value === "nanobanana") return value;
-  throw new HistoryValidationError("provider 不正确");
+function readProvider(
+  value: unknown
+): HistoryProviderId {
+  if (
+    typeof value !== "string"
+  ) {
+    throw new HistoryValidationError(
+      "provider 必须是字符串"
+    );
+  }
+
+  const normalized =
+    value.trim();
+
+  if (
+    !/^[A-Za-z0-9_-]{2,40}$/.test(
+      normalized
+    )
+  ) {
+    throw new HistoryValidationError(
+      "provider 格式不正确"
+    );
+  }
+
+  return normalized;
 }
 
 function readOperation(value: unknown): HistoryOperation {

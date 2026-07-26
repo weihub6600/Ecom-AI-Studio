@@ -1,0 +1,425 @@
+<script setup lang="ts">
+import {
+  computed,
+  onMounted,
+  ref
+} from "vue";
+import {
+  ApiError,
+  apiRequest
+} from "./api/client";
+import WorkLibrary from "./components/WorkLibrary.vue";
+import BatchStudio from "./components/BatchStudio.vue";
+import AccountHistory from "./components/AccountHistory.vue";
+import type {
+  AuthUser,
+  CreditRecord,
+  PriceItem,
+  UsageRecord
+} from "./types";
+import {
+  formatDate,
+  formatPoints
+} from "./utils/format";
+
+type AccountSection =
+  | "library"
+  | "history"
+  | "batch"
+  | "usage"
+  | "credits";
+
+const user =
+  ref<AuthUser | null>(null);
+
+const prices =
+  ref<PriceItem[]>([]);
+
+const usage =
+  ref<UsageRecord[]>([]);
+
+const credits =
+  ref<CreditRecord[]>([]);
+
+const loading =
+  ref(true);
+
+const errorMessage =
+  ref("");
+
+const sections:
+  Array<{
+    id: AccountSection;
+    label: string;
+    hint: string;
+  }> = [
+    {
+      id: "library",
+      label: "作品库",
+      hint: "收藏、分类与回收站"
+    },
+    {
+      id: "history",
+      label: "生成历史",
+      hint: "查看全部生成记录"
+    },
+    {
+      id: "batch",
+      label: "批量工作台",
+      hint: "模板与服务端批次"
+    },
+    {
+      id: "usage",
+      label: "使用记录",
+      hint: "调用结果与模型"
+    },
+    {
+      id: "credits",
+      label: "积分明细",
+      hint: "余额与交易流水"
+    }
+  ];
+
+const activeSection =
+  ref<AccountSection>(
+    readInitialSection()
+  );
+
+const displayCredits =
+  computed(() =>
+    user.value?.role === "admin"
+      ? "不限"
+      : formatPoints(
+          user.value?.credits || 0
+        )
+  );
+
+onMounted(bootstrap);
+
+async function bootstrap() {
+  loading.value = true;
+
+  try {
+    const current =
+      await apiRequest<{
+        user: AuthUser;
+      }>(
+        "/api/auth/me"
+      );
+
+    user.value =
+      current.user;
+
+    const [
+      summary,
+      usageResult,
+      creditResult
+    ] =
+      await Promise.all([
+        apiRequest<{
+          user: AuthUser;
+          prices: PriceItem[];
+        }>(
+          "/api/account/summary"
+        ),
+        apiRequest<{
+          records: UsageRecord[];
+        }>(
+          "/api/account/usage?limit=300"
+        ),
+        apiRequest<{
+          records: CreditRecord[];
+        }>(
+          "/api/account/credits?limit=500"
+        )
+      ]);
+
+    user.value =
+      summary.user;
+
+    prices.value =
+      summary.prices || [];
+
+    usage.value =
+      usageResult.records || [];
+
+    credits.value =
+      creditResult.records || [];
+  }
+  catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 401
+    ) {
+      window.location.href =
+        "/";
+      return;
+    }
+
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : "读取用户后台失败";
+  }
+  finally {
+    loading.value = false;
+  }
+}
+
+function changeSection(
+  section: AccountSection
+) {
+  activeSection.value =
+    section;
+
+  const url =
+    new URL(
+      window.location.href
+    );
+
+  url.searchParams.set(
+    "tab",
+    section
+  );
+
+  window.history.replaceState(
+    {},
+    "",
+    url
+  );
+}
+
+function updateBalance(
+  value: number
+) {
+  if (!user.value) return;
+
+  user.value = {
+    ...user.value,
+    credits: value
+  };
+}
+
+async function logout() {
+  try {
+    await apiRequest(
+      "/api/auth/logout",
+      {
+        method: "POST"
+      }
+    );
+  }
+  finally {
+    window.location.href =
+      "/";
+  }
+}
+
+function readInitialSection():
+  AccountSection {
+  const value =
+    new URLSearchParams(
+      window.location.search
+    ).get("tab");
+
+  return sections.some(
+    (item) =>
+      item.id === value
+  )
+    ? value as AccountSection
+    : "library";
+}
+
+function usageLabel(
+  status:
+    UsageRecord["status"]
+): string {
+  if (status === "success") {
+    return "成功";
+  }
+
+  if (status === "submitted") {
+    return "处理中";
+  }
+
+  return "失败";
+}
+
+function creditTitle(
+  record: CreditRecord
+): string {
+  if (
+    record.type ===
+      "generation_charge"
+  ) {
+    return "AI 生图扣费";
+  }
+
+  if (
+    record.type ===
+      "generation_refund"
+  ) {
+    return "生成退款";
+  }
+
+  if (
+    record.type ===
+      "card_recharge"
+  ) {
+    return "卡密充值";
+  }
+
+  return record.amount >= 0
+    ? "站长增加积分"
+    : "站长扣减积分";
+}
+</script>
+
+<template>
+  <div v-if="loading" class="account-gate">
+    <div class="account-loader"></div>
+    <strong>正在进入用户后台…</strong>
+  </div>
+
+  <div v-else-if="!user" class="account-gate">
+    <strong>无法进入用户后台</strong>
+    <p>{{ errorMessage || '请先登录。' }}</p>
+    <a href="/">返回创作工作台</a>
+  </div>
+
+  <div v-else class="account-shell">
+    <aside class="account-sidebar">
+      <a class="account-brand" href="/">
+        <span>B</span>
+        <div>
+          <strong>BJR AI</strong>
+          <small>USER CONSOLE</small>
+        </div>
+      </a>
+
+      <div class="account-profile">
+        <span>{{ user.username.slice(0, 1).toUpperCase() }}</span>
+        <div>
+          <strong>{{ user.username }}</strong>
+          <small>{{ user.role === 'admin' ? '站长账号' : '普通用户' }}</small>
+        </div>
+      </div>
+
+      <nav>
+        <button
+          v-for="item in sections"
+          :key="item.id"
+          type="button"
+          :class="{ active: activeSection === item.id }"
+          @click="changeSection(item.id)"
+        >
+          <span>{{ item.label.slice(0, 1) }}</span>
+          <div>
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.hint }}</small>
+          </div>
+        </button>
+      </nav>
+
+      <div class="account-sidebar-bottom">
+        <a v-if="user.role === 'admin'" href="/admin">进入站长后台</a>
+        <a href="/">返回创作工作台</a>
+        <button type="button" @click="logout">退出登录</button>
+      </div>
+    </aside>
+
+    <main class="account-main">
+      <header class="account-topbar">
+        <div>
+          <span>V13.5 · ACCOUNT CENTER</span>
+          <h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1>
+        </div>
+
+        <div class="account-balance">
+          <span>当前积分</span>
+          <strong>{{ displayCredits }}</strong>
+        </div>
+      </header>
+
+      <p v-if="errorMessage" class="account-message error">{{ errorMessage }}</p>
+
+      <section v-if="activeSection === 'library'" class="account-content">
+        <WorkLibrary :user-id="user.id" />
+      </section>
+
+      <section v-else-if="activeSection === 'history'" class="account-content">
+        <AccountHistory />
+      </section>
+
+      <section v-else-if="activeSection === 'batch'" class="account-content">
+        <BatchStudio
+          :user="user"
+          @balance-updated="updateBalance"
+        />
+      </section>
+
+      <section v-else-if="activeSection === 'usage'" class="account-content">
+        <header class="account-section-heading">
+          <div>
+            <span>API USAGE</span>
+            <h2>AI 使用记录</h2>
+            <p>查看模型调用、状态和消耗。</p>
+          </div>
+        </header>
+
+        <div class="account-table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>模型</th>
+                <th>状态</th>
+                <th>图片</th>
+                <th>积分</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="record in usage" :key="record.id">
+                <td>{{ formatDate(record.createdAt) }}</td>
+                <td>{{ record.model }}</td>
+                <td><i :class="record.status">{{ usageLabel(record.status) }}</i></td>
+                <td>{{ record.imageCount }}</td>
+                <td>{{ formatPoints(record.pointsCost || 0) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="usage.length === 0" class="account-empty">暂无使用记录</div>
+        </div>
+      </section>
+
+      <section v-else class="account-content">
+        <header class="account-section-heading">
+          <div>
+            <span>CREDIT LEDGER</span>
+            <h2>积分明细</h2>
+            <p>当前余额 {{ displayCredits }}，可用模型价格 {{ prices.length }} 项。</p>
+          </div>
+        </header>
+
+        <div class="account-credit-grid">
+          <article v-for="record in credits" :key="record.id">
+            <div>
+              <strong>{{ creditTitle(record) }}</strong>
+              <span>{{ formatDate(record.createdAt) }}</span>
+            </div>
+            <b :class="{ plus: record.amount >= 0 }">
+              {{ record.amount >= 0 ? '+' : '' }}{{ formatPoints(record.amount) }}
+            </b>
+            <p>{{ record.note || record.model || '积分流水' }}</p>
+            <small>余额 {{ formatPoints(record.balanceAfter) }}</small>
+          </article>
+        </div>
+        <div v-if="credits.length === 0" class="account-empty">暂无积分流水</div>
+      </section>
+    </main>
+  </div>
+</template>
+
+<style src="./account-page.css"></style>
+<style src="./work-library.css"></style>
+<style src="./batch-studio.css"></style>

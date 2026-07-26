@@ -6,6 +6,7 @@ import type { AuditLogService } from "../services/audit-log.js";
 import type { AdminQueryService } from "../services/admin-query.js";
 import type { HealthService } from "../services/health.js";
 import type { BatchJobService } from "../services/batch-jobs.js";
+import type { CustomProviderService } from "../services/custom-providers.js";
 
 export interface AppContext {
   database: AppDatabase;
@@ -16,6 +17,7 @@ export interface AppContext {
   adminQueryService: AdminQueryService;
   healthService: HealthService;
   batchJobService: BatchJobService;
+  customProviderService: CustomProviderService;
   secureAuthCookie: boolean;
   webDist: string;
 }

@@ -5,9 +5,13 @@ import type {
 import type {
   HealthService
 } from "../services/health.js";
+import type {
+  CustomProviderService
+} from "../services/custom-providers.js";
 
 export function createSystemRouter(options: {
   modelSettingsService: ModelSettingsService;
+  customProviderService: CustomProviderService;
   healthService: HealthService;
 }): Router {
   const router = Router();
@@ -56,8 +60,12 @@ export function createSystemRouter(options: {
     (_request, response) => {
       response.json({
         models:
-          options.modelSettingsService
-            .listPublicModels()
+          [
+            ...options.modelSettingsService
+              .listPublicModels(),
+            ...options.customProviderService
+              .listPublicModels()
+          ]
       });
     }
   );
