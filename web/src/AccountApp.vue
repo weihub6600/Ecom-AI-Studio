@@ -290,9 +290,9 @@ function creditTitle(
   <div v-else class="account-shell">
     <aside class="account-sidebar">
       <a class="account-brand" href="/">
-        <span>B</span>
+        <span>Z</span>
         <div>
-          <strong>BJR AI</strong>
+          <strong>ZHE AI</strong>
           <small>USER CONSOLE</small>
         </div>
       </a>

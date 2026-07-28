@@ -45,7 +45,7 @@ const emit = defineEmits<{
       <div class="intro-copy">
         <span class="eyebrow">ECOMMERCE CREATIVE ENGINE</span>
         <h1>一张商品图，生成完整商业视觉</h1>
-        <p>支持百嘉瑞AI、GPT 与 Nano Banana 多种图像模型，可根据画质、速度和积分价格灵活选择。</p>
+        <p>支持 ZHE AI、GPT 与 Nano Banana 多种图像模型，可根据画质、速度和积分价格灵活选择。</p>
       </div>
 
       <div class="intro-side">

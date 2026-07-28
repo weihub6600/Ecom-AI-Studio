@@ -51,7 +51,7 @@ const filteredRecords = computed(() => {
         <span class="step-number">03</span>
         <div>
           <h2>生成历史</h2>
-          <p>最近 20 条来自 MySQL，可在不同设备登录后继续查看</p>
+          <p>最近 20 条来自云端，可在不同设备登录后继续查看</p>
         </div>
       </div>
 
@@ -145,7 +145,7 @@ const filteredRecords = computed(() => {
           : props.filterMode === "favorites"
             ? "暂无收藏记录，点击历史卡片中的 ☆ 收藏 即可标记"
             : props.authenticated
-              ? "当前账号还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到 MySQL。"
+              ? "当前账号还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到云端。"
               : "登录后可使用 AI 生图，并查看当前账号在本机保存的最近历史。"
       }}
     </div>

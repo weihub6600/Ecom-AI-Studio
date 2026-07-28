@@ -1,3 +1,15 @@
+import {
+  getAuthenticatedUser
+} from "../middleware/auth.js";
+import type {
+  RegistrationSettingsService
+} from "../services/registration-settings.js";
+import type {
+  RequestHandler
+} from "express";
+import {
+  createSimpleRateLimit
+} from "../middleware/rate-limit.js";
 import { Router } from "express";
 import {
   AuthError,
@@ -20,14 +32,206 @@ export function createAuthRouter(options: {
   authService: AuthService;
   securityService: SecurityService;
   secureAuthCookie: boolean;
-}): Router {
+
+  registrationSettingsService:
+    RegistrationSettingsService;
+  requireAuth:
+    RequestHandler;
+  requireAdmin:
+    RequestHandler;}): Router {
   const {
     authService,
     securityService,
-    secureAuthCookie
+    secureAuthCookie,
+    registrationSettingsService,
+    requireAuth,
+    requireAdmin
   } = options;
 
   const router = Router();
+  const captchaRateLimit =
+    createSimpleRateLimit({
+      windowMs:
+        15 * 60 * 1000,
+      maxAttempts: 80
+    });
+
+  router.get(
+    "/api/auth/registration-policy",
+    async (
+      _request,
+      response
+    ) => {
+      try {
+        return response.json({
+          registration:
+            await registrationSettingsService
+              .get()
+        });
+      }
+      catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取注册政策失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/registration-settings",
+    requireAuth,
+    requireAdmin,
+    async (
+      _request,
+      response
+    ) => {
+      try {
+        return response.json({
+          registration:
+            await registrationSettingsService
+              .get()
+        });
+      }
+      catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取注册审核设置失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/registration-settings",
+    requireAuth,
+    requireAdmin,
+    async (
+      request,
+      response
+    ) => {
+      try {
+        const body =
+          request.body as {
+            requiresApproval?:
+              unknown;
+          };
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const registration =
+          await registrationSettingsService
+            .update(
+              body
+                ?.requiresApproval,
+              actor.id
+            );
+
+        return response.json({
+          success: true,
+          registration
+        });
+      }
+      catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "保存注册审核设置失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/auth/captcha",
+    captchaRateLimit,
+    async (
+      _request,
+      response
+    ) => {
+      try {
+        const captcha =
+          await authService
+            .createCaptcha();
+
+        response.setHeader(
+          "Cache-Control",
+          "no-store"
+        );
+
+        return response.json({
+          captcha
+        });
+      }
+      catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "验证码加载失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/auth/captcha/:captchaId/image",
+    captchaRateLimit,
+    async (
+      request,
+      response
+    ) => {
+      try {
+        const image =
+          await authService
+            .readCaptchaImage(
+              request.params
+                .captchaId
+            );
+
+        if (!image) {
+          return response
+            .status(404)
+            .json({
+              error: {
+                code:
+                  "CAPTCHA_NOT_FOUND",
+                message:
+                  "验证码已失效，请刷新"
+              }
+            });
+        }
+
+        response.setHeader(
+          "Content-Type",
+          "image/svg+xml; charset=utf-8"
+        );
+
+        response.setHeader(
+          "Cache-Control",
+          "no-store, no-cache, must-revalidate"
+        );
+
+        response.setHeader(
+          "Content-Security-Policy",
+          "default-src 'none'"
+        );
+
+        return response.send(image);
+      }
+      catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "验证码读取失败"
+        );
+      }
+    }
+  );
 
   router.get(
     "/api/auth/me",
@@ -102,15 +306,30 @@ export function createAuthRouter(options: {
           );
         }
 
-        const body = request.body as {
+        const body =
+        request.body as {
           username?: unknown;
           password?: unknown;
+          captchaId?: unknown;
+          captchaAnswer?: unknown;
         };
+
+        await authService
+          .verifyCaptcha(
+            body?.captchaId,
+            body?.captchaAnswer
+          );
+
+        const registrationPolicy =
+          await registrationSettingsService
+            .get();
 
         const result =
           await authService.register(
             body?.username,
-            body?.password
+            body?.password,
+            registrationPolicy
+              .requiresApproval
           );
 
         if (result.token) {
@@ -164,10 +383,13 @@ export function createAuthRouter(options: {
       const clientIp = getClientIp(request);
       const userAgent =
         request.get("user-agent");
-      const body = request.body as {
-        username?: unknown;
+      const body =
+        request.body as {
+          username?: unknown;
         password?: unknown;
-      };
+          captchaId?: unknown;
+          captchaAnswer?: unknown;
+        };
       const accountKey =
         normalizeAccountKey(body?.username);
 
@@ -221,6 +443,12 @@ export function createAuthRouter(options: {
             "登录尝试过多，请稍后再试"
           );
         }
+
+        await authService
+          .verifyCaptcha(
+            body?.captchaId,
+            body?.captchaAnswer
+          );
 
         const result =
           await authService.login(

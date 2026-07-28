@@ -169,6 +169,12 @@ export function createApp(
   }));
 
   app.use(createAuthRouter({
+    requireAdmin:
+      requireAdmin,
+    requireAuth:
+      requireAuth,
+    registrationSettingsService:
+      context.registrationSettingsService,
     authService: context.authService,
     securityService,
     secureAuthCookie:
@@ -206,6 +212,10 @@ export function createApp(
   app.use(createCustomProviderRouter({
     customProviderService:
       context.customProviderService,
+    builtInProviderSettingsService:
+      context.builtInProviderSettingsService,
+    modelSettingsService:
+      context.modelSettingsService,
     requireAuth,
     requireAdmin
   }));

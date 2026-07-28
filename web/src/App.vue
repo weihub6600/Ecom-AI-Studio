@@ -125,7 +125,7 @@ const canGenerate = computed(() => Boolean(
 const operationLabel = computed(() => generationMode.value === "image-edit" ? "参考图生成" : "文字生成图片");
 const selectedSizeLabel = computed(() => formatSizeTitle(outputSize.value));
 const isAuthenticated = computed(() => Boolean(authUser.value));
-const providerSymbol = computed(() => selectedProviderId.value === "grsai" ? "G" : selectedProviderId.value === "nanobanana" ? "N" : "百");
+const providerSymbol = computed(() => selectedProviderId.value === "grsai" ? "G" : selectedProviderId.value === "nanobanana" ? "N" : "Z");
 
 const generationStatusText = computed(() => {
   const progress = Math.round(generationProgress.value);

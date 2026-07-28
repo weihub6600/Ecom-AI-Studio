@@ -18,18 +18,18 @@ const emit = defineEmits<{
 
 <template>
   <header class="topbar">
-    <a class="brand" href="#" aria-label="BJR AI Studio 首页">
+    <a class="brand" href="#" aria-label="ZHE AI Studio 首页">
       <span class="brand-mark"><span></span><span></span></span>
-      <span><strong>BJR AI</strong><small>STUDIO</small></span>
+      <span><strong>ZHE AI</strong><small>STUDIO</small></span>
     </a>
 
     <div class="topbar-center">
       <span class="live-dot"></span>
-      BJR AI 双引擎电商视觉工作台
+      ZHE AI 双引擎电商视觉工作台
     </div>
 
     <div class="topbar-actions">
-      <span class="mode-badge">BJR 0.1</span>
+      <span class="mode-badge">ZHE 1.0</span>
 
       <template v-if="props.authReady">
         <template v-if="props.user">

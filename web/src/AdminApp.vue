@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RegistrationSettingsPanel from "./components/RegistrationSettingsPanel.vue";
 import { computed, onMounted, ref } from "vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
@@ -366,7 +367,7 @@ function auditLabel(action: string) {
 
   <div v-else class="admin-v10-shell">
     <aside class="admin-v10-sidebar">
-      <a class="admin-v10-brand" href="/"><span>B</span><div><strong>BJR AI</strong><small>ADMIN CONSOLE</small></div></a>
+      <a class="admin-v10-brand" href="/"><span>Z</span><div><strong>ZHE AI</strong><small>ADMIN CONSOLE</small></div></a>
       <nav>
         <button v-for="item in sections" :key="item.id" type="button" :class="{ active: activeSection === item.id }" @click="changeSection(item.id)">
           <span>{{ item.label.slice(0, 1) }}</span><div><strong>{{ item.label }}</strong><small>{{ item.hint }}</small></div>
@@ -380,7 +381,7 @@ function auditLabel(action: string) {
 
     <main class="admin-v10-main">
       <header class="admin-v10-topbar">
-        <div><span>V13.5.5 · MYSQL ADMIN</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
+        <div><span>V13.7 · 云端后台</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
         <div class="admin-v10-account"><span>{{ currentUser?.username.slice(0, 1).toUpperCase() }}</span><div><strong>{{ currentUser?.username }}</strong><small>站长账号</small></div></div>
       </header>
 
@@ -395,7 +396,7 @@ function auditLabel(action: string) {
             <article><span>今日生图任务</span><strong>{{ dashboard.today.usage }}</strong><small>成功 {{ dashboard.today.success }} · 失败 {{ dashboard.today.failed }}</small></article>
             <article><span>今日生成图片</span><strong>{{ dashboard.today.images }}</strong><small>平均耗时 {{ formatDuration(dashboard.today.averageDurationMs) }}</small></article>
             <article><span>今日消费积分</span><strong>{{ formatPoints(dashboard.today.spentPoints) }}</strong><small>充值 {{ formatPoints(dashboard.today.rechargedPoints) }}</small></article>
-            <article><span>服务器历史</span><strong>{{ dashboard.storage.histories }}</strong><small>保存图片 {{ dashboard.storage.images }}</small></article>
+            <article><span>云端历史</span><strong>{{ dashboard.storage.histories }}</strong><small>保存图片 {{ dashboard.storage.images }}</small></article>
           </div>
           <div class="admin-v10-dashboard-grid">
             <article class="admin-v10-card chart-card">
@@ -416,6 +417,7 @@ function auditLabel(action: string) {
       </section>
 
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">
+        <RegistrationSettingsPanel />
         <div class="admin-v10-toolbar">
           <input v-model="userSearch" type="search" placeholder="搜索用户名" @keyup.enter="loadUsers(1)" />
           <select v-model="userStatus"><option value="">全部状态</option><option value="pending">待审核</option><option value="active">已启用</option><option value="disabled">已封禁</option><option value="rejected">已拒绝</option></select>

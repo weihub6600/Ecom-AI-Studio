@@ -10,6 +10,9 @@ import {
   createAuthService
 } from "./auth.js";
 import {
+  createRegistrationSettingsService
+} from "./services/registration-settings.js";
+import {
   createAppDatabase
 } from "./db/database.js";
 import {
@@ -39,6 +42,9 @@ import {
 import {
   createCustomProviderService
 } from "./services/custom-providers.js";
+import {
+  createBuiltInProviderSettingsService
+} from "./services/builtin-provider-settings.js";
 
 export async function startServer():
   Promise<void> {
@@ -99,6 +105,11 @@ export async function startServer():
   console.log(
     migrationResult.message
   );
+
+  const registrationSettingsService =
+    createRegistrationSettingsService(
+      database
+    );
 
   const modelSettingsService =
     createModelSettingsService(
@@ -161,6 +172,11 @@ export async function startServer():
         process.env.ADMIN_USERNAME
     });
 
+  const builtInProviderSettingsService =
+    createBuiltInProviderSettingsService(
+      database
+    );
+
   const customProviderService =
     createCustomProviderService(
       database
@@ -173,7 +189,11 @@ export async function startServer():
       baseUrl: `http://127.0.0.1:${port}`
     });
 
+  await builtInProviderSettingsService.initialize();
+
   await Promise.all([
+    registrationSettingsService
+      .initialize(),
     historyService.initialize(),
     authService.initialize(),
     customProviderService.initialize(),
@@ -222,6 +242,10 @@ export async function startServer():
       healthService,
       batchJobService,
       customProviderService,
+      builtInProviderSettingsService:
+        builtInProviderSettingsService,
+      registrationSettingsService:
+        registrationSettingsService,
       secureAuthCookie,
       webDist
     });
