@@ -306,13 +306,15 @@ export function createAuthService(options: AuthServiceOptions) {
         const now =
           new Date();
 
+        const expiresAtIso =
+          mysqlDateToIso(
+            row.expires_at
+          );
+
         const expiresAt =
-          row.expires_at instanceof
-            Date
-            ? row.expires_at
-            : new Date(
-                row.expires_at
-              );
+          expiresAtIso
+            ? new Date(expiresAtIso)
+            : new Date(0);
 
         if (
           row.used_at ||
