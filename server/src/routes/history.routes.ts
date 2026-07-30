@@ -40,6 +40,70 @@ export function createHistoryRouter(options: {
     }
   });
 
+  router.get(
+    "/api/history/:id",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const historyId =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!historyId) {
+          return response.status(400).json({
+            error: {
+              code:
+                "INVALID_HISTORY_ID",
+              message:
+                "缺少历史记录 ID"
+            }
+          });
+        }
+
+        const record =
+          await historyService.getById(
+            historyId,
+            user.id
+          );
+
+        if (!record) {
+          return response.status(404).json({
+            error: {
+              code:
+                "HISTORY_NOT_FOUND",
+              message:
+                "历史记录不存在"
+            }
+          });
+        }
+
+        return response.json({
+          record
+        });
+      } catch (error) {
+        console.error(
+          "History detail error",
+          error
+        );
+
+        return response.status(500).json({
+          error: {
+            code:
+              "HISTORY_DETAIL_ERROR",
+            message:
+              "读取历史记录失败"
+          }
+        });
+      }
+    }
+  );
+
   router.post("/api/history", requireAuth, async (request, response) => {
     try {
       const user = getAuthenticatedUser(request);

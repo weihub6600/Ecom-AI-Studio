@@ -10,6 +10,9 @@ import {
   createAuthService
 } from "./auth.js";
 import {
+  createRegistrationSettingsService
+} from "./services/registration-settings.js";
+import {
   createAppDatabase
 } from "./db/database.js";
 import {
@@ -33,6 +36,15 @@ import {
 import {
   createHealthService
 } from "./services/health.js";
+import {
+  createBatchJobService
+} from "./services/batch-jobs.js";
+import {
+  createCustomProviderService
+} from "./services/custom-providers.js";
+import {
+  createBuiltInProviderSettingsService
+} from "./services/builtin-provider-settings.js";
 
 export async function startServer():
   Promise<void> {
@@ -93,6 +105,11 @@ export async function startServer():
   console.log(
     migrationResult.message
   );
+
+  const registrationSettingsService =
+    createRegistrationSettingsService(
+      database
+    );
 
   const modelSettingsService =
     createModelSettingsService(
@@ -155,10 +172,33 @@ export async function startServer():
         process.env.ADMIN_USERNAME
     });
 
+  const builtInProviderSettingsService =
+    createBuiltInProviderSettingsService(
+      database
+    );
+
+  const customProviderService =
+    createCustomProviderService(
+      database
+    );
+
+  const batchJobService =
+    createBatchJobService({
+      database,
+      modelSettingsService,
+      baseUrl: `http://127.0.0.1:${port}`
+    });
+
+  await builtInProviderSettingsService.initialize();
+
   await Promise.all([
+    registrationSettingsService
+      .initialize(),
     historyService.initialize(),
     authService.initialize(),
-    modelSettingsService.initialize()
+    customProviderService.initialize(),
+    modelSettingsService.initialize(),
+    batchJobService.initialize()
   ]);
 
   const health =
@@ -185,7 +225,10 @@ export async function startServer():
 
   const stopReconciliation =
     startAsyncReconciliation(
-      authService
+      database,
+      authService,
+      historyService,
+      modelSettingsService
     );
 
   const app =
@@ -197,6 +240,12 @@ export async function startServer():
       auditLogService,
       adminQueryService,
       healthService,
+      batchJobService,
+      customProviderService,
+      builtInProviderSettingsService:
+        builtInProviderSettingsService,
+      registrationSettingsService:
+        registrationSettingsService,
       secureAuthCookie,
       webDist
     });
@@ -228,6 +277,9 @@ export async function startServer():
       }
     );
 
+  const stopBatchWorker =
+    batchJobService.startWorker();
+
   let closing = false;
 
   async function close(
@@ -242,6 +294,7 @@ export async function startServer():
     );
 
     stopReconciliation();
+    stopBatchWorker();
 
     await new Promise<void>(
       (resolve) => {

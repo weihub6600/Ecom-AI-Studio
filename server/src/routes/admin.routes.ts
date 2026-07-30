@@ -1,3 +1,14 @@
+import type { AppDatabase } from "../db/database.js";
+import type { HistoryService } from "../history.js";
+import {
+  failAndRefundAdminTask,
+  queryAdminTasks,
+  readAdminTaskHealth,
+  type AdminTaskStatusFilter
+} from "../services/admin-generation-tasks.js";
+import {
+  runTaskRecoveryOnce
+} from "../services/async-reconciliation.js";
 import { Router, type Request, type RequestHandler } from "express";
 import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
@@ -7,14 +18,25 @@ import { getAuthenticatedUser } from "../middleware/auth.js";
 import { readRouteParam, sendAuthError } from "../utils/express.js";
 
 export function createAdminRouter(options: {
+  database: AppDatabase;
   authService: AuthService;
+  historyService: HistoryService;
   modelSettingsService: ModelSettingsService;
   auditLogService: AuditLogService;
   adminQueryService: AdminQueryService;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;
 }): Router {
-  const { authService, modelSettingsService, auditLogService, adminQueryService, requireAuth, requireAdmin } = options;
+  const {
+    database,
+    authService,
+    historyService,
+    modelSettingsService,
+    auditLogService,
+    adminQueryService,
+    requireAuth,
+    requireAdmin
+  } = options;
   const router = Router();
   const protectedAdmin = [requireAuth, requireAdmin] as const;
 
@@ -22,6 +44,203 @@ export function createAdminRouter(options: {
     try { return response.json(await adminQueryService.dashboard()); }
     catch (error) { return sendAuthError(response, error, "读取站长看板失败"); }
   });
+
+
+  router.get(
+    "/api/admin/tasks",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const result =
+          await queryAdminTasks(
+            database,
+            {
+              ...readPage(request),
+              status:
+                readText(
+                  request.query.status,
+                  20
+                ) as
+                  | AdminTaskStatusFilter
+                  | undefined,
+              provider:
+                readText(
+                  request.query.provider,
+                  80
+                ),
+              search:
+                readText(
+                  request.query.search,
+                  200
+                ),
+              staleOnly:
+                readBoolean(
+                  request.query.staleOnly
+                )
+            }
+          );
+
+        return response.json({
+          tasks:
+            result.items,
+          pagination:
+            result.pagination,
+          summary:
+            result.summary
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取任务管理列表失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/tasks/health",
+    ...protectedAdmin,
+    async (_request, response) => {
+      try {
+        return response.json(
+          await readAdminTaskHealth(
+            database
+          )
+        );
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取任务健康统计失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/tasks/recover",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const stats =
+          await runTaskRecoveryOnce(
+            database,
+            authService,
+            historyService,
+            modelSettingsService,
+            200
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "generation_task.recover",
+          targetType:
+            "generation_task",
+          summary:
+            "站长手动运行任务恢复扫描",
+          details:
+            stats,
+          context:
+            auditContext(request)
+        });
+
+        return response.json({
+          success: true,
+          stats
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "运行任务恢复扫描失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/tasks/:id/fail-refund",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const taskId =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_TASK_ID",
+            "缺少任务 ID"
+          );
+
+        if (!taskId) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const body =
+          request.body as {
+            reason?: unknown
+          };
+
+        const reason =
+          typeof body?.reason ===
+            "string"
+            ? body.reason
+            : "站长手动终止异常任务";
+
+        const result =
+          await failAndRefundAdminTask(
+            database,
+            authService,
+            taskId,
+            reason
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "generation_task.fail_refund",
+          targetType:
+            "generation_task",
+          targetId:
+            taskId,
+          summary:
+            `终止任务并退款：${result.task.username} · ${result.task.model}`,
+          details: {
+            reason,
+            refundedPoints:
+              result.refundedPoints,
+            status:
+              result.task.status
+          },
+          context:
+            auditContext(request)
+        });
+
+        return response.json({
+          success: true,
+          task:
+            result.task,
+          refundedPoints:
+            result.refundedPoints
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "终止任务并退款失败"
+        );
+      }
+    }
+  );
 
   router.get("/api/admin/users", ...protectedAdmin, async (request, response) => {
     try {
@@ -156,6 +375,10 @@ function boundedInt(value: unknown, fallback: number, min: number, max: number) 
   return Number.isInteger(numeric) ? Math.min(max, Math.max(min, numeric)) : fallback;
 }
 function readText(value: unknown, max: number) { return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined; }
+function readBoolean(value: unknown) {
+  return value === "true" || value === "1";
+}
+
 function requiredId(value: string | string[] | undefined, response: import("express").Response, code: string, message: string) {
   const id = readRouteParam(value);
   if (!id) { response.status(400).json({ error: { code, message } }); return undefined; }

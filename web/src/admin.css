@@ -10,7 +10,6 @@
 @media(max-width:900px){.admin-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.admin-layout{grid-template-columns:1fr}.admin-users-panel{min-height:auto}.admin-user-list{max-height:220px}.admin-management-grid{grid-template-columns:1fr}.admin-generated-grid,.admin-card-table{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.admin-overlay{padding:0}.admin-dialog{height:100vh;border-radius:0}.admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-layout,.admin-card-workspace{padding-left:12px;padding-right:12px}.admin-card-generator{align-items:stretch;flex-direction:column}.admin-card-form{align-items:stretch;flex-direction:column}.admin-card-form input{width:100%}.admin-generated-grid,.admin-card-table{grid-template-columns:1fr}}
 .admin-record-card blockquote{margin:6px 0;padding:6px 8px;border-left:2px solid #a69cec;background:#f6f4ff;color:#66687a;font-size:8px;line-height:1.5;white-space:pre-wrap}
 
-
 /* V7 后台可读性与危险操作 */
 .admin-header p { font-size: 13px; }
 .admin-stats span, .admin-list-heading span, .admin-card-list-heading span { font-size: 11px; }

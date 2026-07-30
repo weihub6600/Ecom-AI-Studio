@@ -1,102 +1,274 @@
-import express, { type Express } from "express";
+import express, {
+  type Express
+} from "express";
 import path from "node:path";
-import type { AppContext } from "./context.js";
-import { createAuthMiddleware } from "../middleware/auth.js";
-import { createSystemRouter } from "../routes/system.routes.js";
-import { createAuthRouter } from "../routes/auth.routes.js";
-import { createAccountRouter } from "../routes/account.routes.js";
-import { createAdminRouter } from "../routes/admin.routes.js";
-import { createHistoryRouter } from "../routes/history.routes.js";
-import { createGenerationRouter } from "../routes/generation.routes.js";
+import type {
+  AppContext
+} from "./context.js";
+import {
+  createAuthMiddleware
+} from "../middleware/auth.js";
+import {
+  configureTrustProxy,
+  createCsrfProtection,
+  createJsonBodyErrorHandler,
+  createSecurityHeaders,
+  readJsonLimit
+} from "../middleware/security.js";
+import {
+  createSystemRouter
+} from "../routes/system.routes.js";
+import {
+  createSecurityRouter
+} from "../routes/security.routes.js";
+import {
+  createAuthRouter
+} from "../routes/auth.routes.js";
+import {
+  createAccountRouter
+} from "../routes/account.routes.js";
+import {
+  createAdminRouter
+} from "../routes/admin.routes.js";
+import {
+  createHistoryRouter
+} from "../routes/history.routes.js";
+import {
+  createGenerationRouter
+} from "../routes/generation.routes.js";
+import {
+  createBatchRouter
+} from "../routes/batch.routes.js";
+import {
+  createLibraryRouter
+} from "../routes/library.routes.js";
+import {
+  createCustomProviderRouter
+} from "../routes/custom-provider.routes.js";
+import {
+  createWorkLibraryService
+} from "../services/work-library.js";
+import {
+  createSecurityService
+} from "../services/security.js";
 
-export function createApp(context: AppContext): Express {
+export function createApp(
+  context: AppContext
+): Express {
   const app = express();
+
+  configureTrustProxy(app);
 
   const {
     requireAuth,
     requireAdmin
-  } = createAuthMiddleware(context.authService);
+  } = createAuthMiddleware(
+    context.authService
+  );
+
+  const workLibraryService =
+    createWorkLibraryService(
+      context.database
+    );
+
+  const securityService =
+    createSecurityService(
+      context.database
+    );
+
+  const csrfProtection =
+    createCsrfProtection({
+      secureCookie:
+        context.secureAuthCookie,
+      internalWorkerSecret:
+        context.batchJobService
+          .workerSecret,
+      onReject: (event) =>
+        securityService.recordEvent({
+          eventType: "csrf.rejected",
+          severity: "warning",
+          success: false,
+          clientIp: event.clientIp,
+          requestMethod:
+            event.requestMethod,
+          requestPath:
+            event.requestPath,
+          reason: event.reason,
+          details: {
+            origin: event.origin,
+            secFetchSite:
+              event.secFetchSite
+          }
+        })
+    });
 
   app.disable("x-powered-by");
 
-  app.use(express.json({
-    limit: "120mb"
-  }));
+  app.use(
+    createSecurityHeaders({
+      secureCookie:
+        context.secureAuthCookie
+    })
+  );
 
-  app.use((_request, response, next) => {
-    response.setHeader(
-      "X-Content-Type-Options",
-      "nosniff"
-    );
+  app.use(
+    createSecurityRouter({
+      securityService,
+      issueCsrfToken:
+        csrfProtection.issueToken,
+      requireAuth,
+      requireAdmin
+    })
+  );
 
-    response.setHeader(
-      "X-Frame-Options",
-      "DENY"
-    );
+  app.use(
+    "/api",
+    csrfProtection.middleware
+  );
 
-    response.setHeader(
-      "Referrer-Policy",
-      "same-origin"
-    );
+  app.use(
+    "/api/images/generate",
+    express.json({
+      limit: readJsonLimit(
+        "GENERATION_JSON_LIMIT",
+        "20mb"
+      )
+    })
+  );
 
-    response.setHeader(
-      "Permissions-Policy",
-      "camera=(), microphone=(), geolocation=()"
-    );
+  app.use(
+    "/api/batches",
+    express.json({
+      limit: readJsonLimit(
+        "BATCH_JSON_LIMIT",
+        "5mb"
+      )
+    })
+  );
 
-    next();
-  });
+  app.use(
+    express.json({
+      limit: readJsonLimit(
+        "DEFAULT_JSON_LIMIT",
+        "1mb"
+      )
+    })
+  );
+
+  app.use(
+    createJsonBodyErrorHandler()
+  );
 
   app.use(createSystemRouter({
-    modelSettingsService: context.modelSettingsService,
-    healthService: context.healthService
+    modelSettingsService:
+      context.modelSettingsService,
+    customProviderService:
+      context.customProviderService,
+    healthService:
+      context.healthService
   }));
 
   app.use(createAuthRouter({
+    requireAdmin:
+      requireAdmin,
+    requireAuth:
+      requireAuth,
+    registrationSettingsService:
+      context.registrationSettingsService,
     authService: context.authService,
-    secureAuthCookie: context.secureAuthCookie
+    securityService,
+    secureAuthCookie:
+      context.secureAuthCookie
   }));
 
   app.use(createAccountRouter({
+    database: context.database,
     authService: context.authService,
-    modelSettingsService: context.modelSettingsService,
+    modelSettingsService:
+      context.modelSettingsService,
+    requireAuth
+  }));
+
+  app.use(createLibraryRouter({
+    workLibraryService,
     requireAuth
   }));
 
   app.use(createAdminRouter({
+    database: context.database,
     authService: context.authService,
-    modelSettingsService: context.modelSettingsService,
-    auditLogService: context.auditLogService,
-    adminQueryService: context.adminQueryService,
+    historyService:
+      context.historyService,
+    modelSettingsService:
+      context.modelSettingsService,
+    auditLogService:
+      context.auditLogService,
+    adminQueryService:
+      context.adminQueryService,
     requireAuth,
     requireAdmin
   }));
 
+  app.use(createCustomProviderRouter({
+    customProviderService:
+      context.customProviderService,
+    builtInProviderSettingsService:
+      context.builtInProviderSettingsService,
+    modelSettingsService:
+      context.modelSettingsService,
+    requireAuth,
+    requireAdmin
+  }));
+
+  app.use(createBatchRouter({
+    batchJobService:
+      context.batchJobService,
+    requireAuth
+  }));
+
   app.use(createHistoryRouter({
-    historyService: context.historyService,
+    historyService:
+      context.historyService,
     requireAuth
   }));
 
   app.use(createGenerationRouter({
+    database: context.database,
     authService: context.authService,
-    modelSettingsService: context.modelSettingsService,
+    historyService:
+      context.historyService,
+    modelSettingsService:
+      context.modelSettingsService,
+    customProviderService:
+      context.customProviderService,
+    batchWorkerSecret:
+      context.batchJobService
+        .workerSecret,
     requireAuth
   }));
 
   app.use(express.static(context.webDist));
 
-  app.get("/{*path}", (request, response, next) => {
-    if (request.path.startsWith("/api/")) {
-      return next();
-    }
-
-    response.sendFile(
-      path.join(context.webDist, "index.html"),
-      (error) => {
-        if (error) next();
+  app.get(
+    "/{*path}",
+    (request, response, next) => {
+      if (
+        request.path.startsWith("/api/")
+      ) {
+        return next();
       }
-    );
-  });
+
+      response.sendFile(
+        path.join(
+          context.webDist,
+          "index.html"
+        ),
+        (error) => {
+          if (error) next();
+        }
+      );
+    }
+  );
 
   return app;
 }

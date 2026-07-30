@@ -1,4 +1,8 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import {
+  randomBytes,
+  randomUUID,
+  timingSafeEqual
+} from "node:crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { AppDatabase } from "./db/database.js";
 import { mysqlDateToIso, withTransaction } from "./db/database.js";
@@ -61,6 +65,21 @@ interface AuthServiceOptions {
   adminUsername?: string;
 }
 
+interface CaptchaRow
+  extends RowDataPacket {
+  id: string;
+  answer_salt: string;
+  answer_hash: string;
+  image_svg: string;
+  expires_at:
+    string |
+    Date;
+  used_at:
+    string |
+    Date |
+    null;
+}
+
 interface UserRow extends RowDataPacket {
   id: string;
   username: string;
@@ -82,6 +101,52 @@ export function createAuthService(options: AuthServiceOptions) {
   const configuredAdminKey = configuredAdminUsername?.toLocaleLowerCase("zh-CN");
 
   async function initialize(): Promise<void> {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS
+         app_auth_captchas (
+           id CHAR(36)
+             NOT NULL PRIMARY KEY,
+           answer_salt VARCHAR(64)
+             NOT NULL,
+           answer_hash CHAR(64)
+             NOT NULL,
+           image_svg MEDIUMTEXT
+             NOT NULL,
+           created_at DATETIME(3)
+             NOT NULL,
+           expires_at DATETIME(3)
+             NOT NULL,
+           used_at DATETIME(3)
+             NULL,
+           KEY idx_auth_captcha_expiry
+             (expires_at, used_at)
+         )
+         ENGINE=InnoDB
+         DEFAULT CHARSET=utf8mb4
+         COLLATE=utf8mb4_unicode_ci`
+    );
+
+    const captchaCleanupTime =
+      new Date();
+
+    await pool.execute(
+      `DELETE FROM
+         app_auth_captchas
+       WHERE
+         expires_at <= ?
+         OR (
+           used_at IS NOT NULL
+           AND used_at <= ?
+         )`,
+      [
+        captchaCleanupTime,
+        new Date(
+          captchaCleanupTime
+            .getTime() -
+          24 * 60 * 60 * 1000
+        )
+      ]
+    );
     await pool.execute("DELETE FROM app_sessions WHERE expires_at <= ?", [new Date()]);
     if (!configuredAdminKey) return;
 
@@ -99,9 +164,220 @@ export function createAuthService(options: AuthServiceOptions) {
     });
   }
 
+  async function createCaptcha():
+    Promise<{
+      id: string;
+      imageUrl: string;
+      expiresAt: string;
+    }> {
+    const id =
+      randomUUID();
+
+    const answer =
+      createCaptchaCode();
+
+    const answerSalt =
+      randomBytes(16)
+        .toString("hex");
+
+    const createdAt =
+      new Date();
+
+    const expiresAt =
+      new Date(
+        createdAt.getTime() +
+        5 * 60 * 1000
+      );
+
+    await pool.execute(
+      `INSERT INTO
+         app_auth_captchas (
+           id,
+           answer_salt,
+           answer_hash,
+           image_svg,
+           created_at,
+           expires_at,
+           used_at
+         ) VALUES (
+           ?, ?, ?, ?, ?, ?, NULL
+         )`,
+      [
+        id,
+        answerSalt,
+        hashToken(
+          `${id}:${answerSalt}:${answer}`
+        ),
+        createCaptchaSvg(answer),
+        createdAt,
+        expiresAt
+      ]
+    );
+
+    return {
+      id,
+      imageUrl:
+        `/api/auth/captcha/${encodeURIComponent(id)}/image`,
+      expiresAt:
+        expiresAt.toISOString()
+    };
+  }
+
+  async function readCaptchaImage(
+    captchaIdInput: unknown
+  ):
+    Promise<
+      string |
+      undefined
+    > {
+    const captchaId =
+      normalizeCaptchaId(
+        captchaIdInput
+      );
+
+    const [rows] =
+      await pool.query<
+        CaptchaRow[]
+      >(
+        `SELECT
+           image_svg
+         FROM
+           app_auth_captchas
+         WHERE
+           id = ?
+           AND used_at IS NULL
+           AND expires_at > ?
+         LIMIT 1`,
+        [
+          captchaId,
+          new Date()
+        ]
+      );
+
+    return rows[0]
+      ?.image_svg;
+  }
+
+  async function verifyCaptcha(
+    captchaIdInput: unknown,
+    answerInput: unknown
+  ):
+    Promise<void> {
+    const captchaId =
+      normalizeCaptchaId(
+        captchaIdInput
+      );
+
+    const answer =
+      normalizeCaptchaAnswer(
+        answerInput
+      );
+
+    await withTransaction(
+      pool,
+      async (connection) => {
+        const [rows] =
+          await connection.query<
+            CaptchaRow[]
+          >(
+            `SELECT *
+             FROM
+               app_auth_captchas
+             WHERE
+               id = ?
+             LIMIT 1
+             FOR UPDATE`,
+            [
+              captchaId
+            ]
+          );
+
+        const row =
+          rows[0];
+
+        if (!row) {
+          throw new AuthError(
+            400,
+            "CAPTCHA_NOT_FOUND",
+            "验证码无效，请刷新后重试"
+          );
+        }
+
+        const now =
+          new Date();
+
+        const expiresAtIso =
+          mysqlDateToIso(
+            row.expires_at
+          );
+
+        const expiresAt =
+          expiresAtIso
+            ? new Date(expiresAtIso)
+            : new Date(0);
+
+        if (
+          row.used_at ||
+          expiresAt.getTime() <=
+            now.getTime()
+        ) {
+          throw new AuthError(
+            400,
+            "CAPTCHA_EXPIRED",
+            "验证码已失效，请刷新后重试"
+          );
+        }
+
+        await connection.execute(
+          `UPDATE
+             app_auth_captchas
+           SET
+             used_at = ?
+           WHERE
+             id = ?`,
+          [
+            now,
+            captchaId
+          ]
+        );
+
+        const expected =
+          Buffer.from(
+            row.answer_hash,
+            "hex"
+          );
+
+        const actual =
+          Buffer.from(
+            hashToken(
+              `${captchaId}:${row.answer_salt}:${answer}`
+            ),
+            "hex"
+          );
+
+        const valid =
+          expected.length ===
+            actual.length &&
+          timingSafeEqual(
+            expected,
+            actual
+          );
+
+        if (!valid) {
+          throw new AuthError(
+            400,
+            "INVALID_CAPTCHA",
+            "验证码不正确，请重新输入"
+          );
+        }
+      }
+    );
+  }
+
   async function register(
     usernameInput: unknown,
-    passwordInput: unknown
+    passwordInput: unknown,
+    requiresApproval = true
   ): Promise<{ user: PublicUser; pending: boolean; token?: string }> {
     const username = normalizeUsername(usernameInput);
     const password = normalizePassword(passwordInput);
@@ -123,7 +399,14 @@ export function createAuthService(options: AuthServiceOptions) {
       const createdAt = new Date();
       const userId = randomUUID();
       const role: UserRole = isFirstConfiguredAdmin ? "admin" : "user";
-      const status: UserStatus = isFirstConfiguredAdmin ? "active" : "pending";
+      const status:
+        UserStatus =
+        (
+          isFirstConfiguredAdmin ||
+          !requiresApproval
+        )
+          ? "active"
+          : "pending";
 
       await connection.execute(
         `INSERT INTO app_users
@@ -138,8 +421,12 @@ export function createAuthService(options: AuthServiceOptions) {
           role,
           status,
           createdAt,
-          isFirstConfiguredAdmin ? createdAt : null,
-          isFirstConfiguredAdmin ? createdAt : null
+          status === "active"
+            ? createdAt
+            : null,
+          status === "active"
+            ? createdAt
+            : null
         ]
       );
 
@@ -155,7 +442,10 @@ export function createAuthService(options: AuthServiceOptions) {
         userId,
         username,
         success: true,
-        reason: "站长账号首次注册",
+        reason:
+          isFirstConfiguredAdmin
+            ? "站长账号首次注册"
+            : "注册后自动启用",
         createdAt
       });
       return { user: toPublicUser(user), pending: false, token };
@@ -651,6 +941,9 @@ export function createAuthService(options: AuthServiceOptions) {
     authFile: options.database.storageLabel,
     sessionTtlSeconds,
     initialize,
+    createCaptcha,
+    readCaptchaImage,
+    verifyCaptcha,
     register,
     login,
     logout,
@@ -674,6 +967,275 @@ export function createAuthService(options: AuthServiceOptions) {
     recordUsage,
     finalizeAsyncUsage
   };
+}
+
+const CAPTCHA_ALPHABET =
+  "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+function createCaptchaCode(
+  length = 5
+): string {
+  let output = "";
+
+  for (
+    let index = 0;
+    index < length;
+    index += 1
+  ) {
+    output +=
+      CAPTCHA_ALPHABET.charAt(
+        randomCaptchaInteger(
+          0,
+          CAPTCHA_ALPHABET.length - 1
+        )
+      );
+  }
+
+  return output;
+}
+
+function normalizeCaptchaId(
+  value: unknown
+): string {
+  const text =
+    typeof value ===
+      "string"
+      ? value.trim()
+      : "";
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      text
+    )
+  ) {
+    throw new AuthError(
+      400,
+      "CAPTCHA_REQUIRED",
+      "请刷新并输入验证码"
+    );
+  }
+
+  return text;
+}
+
+function normalizeCaptchaAnswer(
+  value: unknown
+): string {
+  const text =
+    typeof value ===
+      "string"
+      ? value
+          .trim()
+          .toUpperCase()
+      : "";
+
+  if (
+    !/^[2-9A-HJ-NP-Z]{4,6}$/.test(
+      text
+    )
+  ) {
+    throw new AuthError(
+      400,
+      "CAPTCHA_REQUIRED",
+      "请输入图片中的验证码"
+    );
+  }
+
+  return text;
+}
+
+function createCaptchaSvg(
+  answer: string
+): string {
+  const width = 156;
+  const height = 48;
+
+  const linePalette = [
+    "#7769e6",
+    "#55b8da",
+    "#f18a72",
+    "#7d91b2"
+  ];
+
+  const textPalette = [
+    "#3e358f",
+    "#175f83",
+    "#8c3e45",
+    "#2f5d50"
+  ];
+
+  const lines =
+    Array.from(
+      {
+        length: 7
+      },
+      () => {
+        const color =
+          linePalette[
+            randomCaptchaInteger(
+              0,
+              linePalette.length - 1
+            )
+          ] ||
+          "#7769e6";
+
+        return `<line
+          x1="${randomCaptchaInteger(0, width)}"
+          y1="${randomCaptchaInteger(0, height)}"
+          x2="${randomCaptchaInteger(0, width)}"
+          y2="${randomCaptchaInteger(0, height)}"
+          stroke="${color}"
+          stroke-width="${randomCaptchaInteger(1, 2)}"
+          opacity="0.32"
+        />`;
+      }
+    ).join("");
+
+  const dots =
+    Array.from(
+      {
+        length: 28
+      },
+      () => {
+        const color =
+          linePalette[
+            randomCaptchaInteger(
+              0,
+              linePalette.length - 1
+            )
+          ] ||
+          "#55b8da";
+
+        return `<circle
+          cx="${randomCaptchaInteger(2, width - 2)}"
+          cy="${randomCaptchaInteger(2, height - 2)}"
+          r="${randomCaptchaInteger(1, 2)}"
+          fill="${color}"
+          opacity="0.28"
+        />`;
+      }
+    ).join("");
+
+  const characters =
+    Array.from(answer)
+      .map(
+        (
+          character,
+          index
+        ) => {
+          const x =
+            18 +
+            index * 28 +
+            randomCaptchaInteger(
+              -2,
+              2
+            );
+
+          const y =
+            34 +
+            randomCaptchaInteger(
+              -3,
+              3
+            );
+
+          const rotation =
+            randomCaptchaInteger(
+              -16,
+              16
+            );
+
+          const color =
+            textPalette[
+              randomCaptchaInteger(
+                0,
+                textPalette.length - 1
+              )
+            ] ||
+            "#3e358f";
+
+          return `<text
+            x="${x}"
+            y="${y}"
+            fill="${color}"
+            font-size="27"
+            font-weight="800"
+            font-family="Arial, sans-serif"
+            text-anchor="middle"
+            transform="rotate(${rotation} ${x} ${y})"
+          >${escapeCaptchaXml(character)}</text>`;
+        }
+      )
+      .join("");
+
+  return `<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="${width}"
+    height="${height}"
+    viewBox="0 0 ${width} ${height}"
+    role="img"
+    aria-label="图形验证码"
+  >
+    <defs>
+      <linearGradient
+        id="captchaBackground"
+        x1="0"
+        y1="0"
+        x2="1"
+        y2="1"
+      >
+        <stop
+          offset="0%"
+          stop-color="#f7f5ff"
+        />
+        <stop
+          offset="100%"
+          stop-color="#eaf8ff"
+        />
+      </linearGradient>
+    </defs>
+    <rect
+      width="100%"
+      height="100%"
+      rx="10"
+      fill="url(#captchaBackground)"
+    />
+    ${dots}
+    ${lines}
+    ${characters}
+  </svg>`;
+}
+
+function randomCaptchaInteger(
+  min: number,
+  max: number
+): number {
+  const range =
+    max - min + 1;
+
+  const value =
+    randomBytes(4)
+      .readUInt32BE(0);
+
+  return min +
+    value % range;
+}
+
+function escapeCaptchaXml(
+  value: string
+): string {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    );
 }
 
 async function settleGenerationInTransaction(

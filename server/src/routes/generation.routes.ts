@@ -1,3 +1,7 @@
+import type { AppDatabase } from "../db/database.js";
+import type {
+  HistoryService
+} from "../history.js";
 import {
   Router,
   type RequestHandler,
@@ -17,6 +21,9 @@ import {
 import type {
   ModelSettingsService
 } from "../services/model-settings.js";
+import type {
+  CustomProviderService
+} from "../services/custom-providers.js";
 import {
   generateImage,
   getImageTask
@@ -36,18 +43,35 @@ import {
   createGenerationGuard
 } from "../services/generation-guard.js";
 import {
+  createGenerationTask,
+  findGenerationTaskByProviderTaskId,
+  parseProviderProgress,
+  updateGenerationTask
+} from "../services/generation-tasks.js";
+import {
+  archiveGenerationResult
+} from "../services/generation-result-archive.js";
+import {
   readRouteParam,
   sendAuthError
 } from "../utils/express.js";
 
 export function createGenerationRouter(options: {
+  database: AppDatabase;
   authService: AuthService;
+  historyService: HistoryService;
   modelSettingsService: ModelSettingsService;
+  customProviderService: CustomProviderService;
+  batchWorkerSecret?: string;
   requireAuth: RequestHandler;
 }): Router {
   const {
+    database,
     authService,
+    historyService,
     modelSettingsService,
+    customProviderService,
+    batchWorkerSecret,
     requireAuth
   } = options;
 
@@ -89,10 +113,28 @@ export function createGenerationRouter(options: {
     }
   });
 
+
+  const batchAwareRateLimit: RequestHandler =
+    (request, response, next) => {
+      if (
+        batchWorkerSecret &&
+        request.get("x-ecom-batch-worker") ===
+          batchWorkerSecret
+      ) {
+        next();
+        return;
+      }
+
+      generationRateLimit(
+        request,
+        response,
+        next
+      );
+    };
   router.post(
     "/api/images/generate",
     requireAuth,
-    generationRateLimit,
+    batchAwareRateLimit,
     async (request, response) => {
       const user = getAuthenticatedUser(request);
 
@@ -105,6 +147,8 @@ export function createGenerationRouter(options: {
       let reservation:
         GenerationReservation | undefined;
 
+      let taskRecordId: string | undefined;
+
       let releaseGeneration:
         (() => void) | undefined;
 
@@ -114,6 +158,10 @@ export function createGenerationRouter(options: {
 
         const runtimeModel =
           modelSettingsService.get(
+            input.provider,
+            input.model
+          ) ||
+          customProviderService.getRuntimeModel(
             input.provider,
             input.model
           );
@@ -229,14 +277,82 @@ export function createGenerationRouter(options: {
             model.name
           );
 
+        taskRecordId =
+          await createGenerationTask(
+            database,
+            {
+              userId: user.id,
+              batchItemId:
+                readBatchItemId(request.body),
+              provider: input.provider,
+              model: input.model,
+              operation: input.operation,
+              size: input.size,
+              prompt: input.prompt,
+              requestedImageCount: input.count,
+              operationId:
+                reservation.operationId,
+              reservedPoints:
+                reservation.pointsCost,
+              thumbnailDataUrl:
+                readTaskThumbnail(request.body),
+              requestSnapshot: {
+                provider: input.provider,
+                model: input.model,
+                operation: input.operation,
+                prompt: input.prompt,
+                negativePrompt:
+                  input.negativePrompt,
+                size: input.size,
+                count: input.count,
+                seed: input.seed
+              }
+            }
+          );
+
+        await updateGenerationTask(
+          database,
+          taskRecordId,
+          {
+            status: "running",
+            stage: "submitting",
+            progress: 30,
+            providerProgress:
+              "正在提交模型",
+            markStarted: true
+          }
+        );
+
         const result =
-          await generateImage(input);
+          customProviderService.hasProvider(input.provider)
+            ? await customProviderService.generate(input)
+            : await generateImage(input);
 
         const isPending =
           result.status === "pending" ||
           result.status === "processing";
 
         if (isPending) {
+          await updateGenerationTask(
+            database,
+            taskRecordId,
+            {
+              status: "running",
+              stage: "processing",
+              progress:
+                parseProviderProgress(
+                  result.progress,
+                  45
+                ),
+              providerTaskId:
+                result.taskId ||
+                result.requestId,
+              providerProgress:
+                result.progress ||
+                "AI 正在生成画面"
+            }
+          );
+
           await safeRecordUsage(
             authService,
             {
@@ -246,8 +362,8 @@ export function createGenerationRouter(options: {
               durationMs: result.durationMs,
               cost: result.cost,
               requestId:
-                result.requestId ||
-                result.taskId,
+                result.taskId ||
+                result.requestId,
               operationId:
                 reservation.operationId,
               pointsCost:
@@ -260,7 +376,8 @@ export function createGenerationRouter(options: {
             result,
             credits: reservation.balance,
             pointsCost:
-              reservation.pointsCost
+              reservation.pointsCost,
+            taskRecordId
           });
         }
 
@@ -273,6 +390,52 @@ export function createGenerationRouter(options: {
           );
         }
 
+        const historyRecord =
+          await archiveGenerationResult(
+            {
+              database,
+              historyService,
+              taskId:
+                taskRecordId,
+              userId: user.id,
+              username:
+                user.username,
+              provider:
+                input.provider,
+              providerName:
+                model.providerName,
+              model:
+                input.model,
+              prompt:
+                input.prompt,
+              operation:
+                input.operation,
+              size:
+                input.size,
+              result,
+              clientIp:
+                request.ip,
+              userAgent:
+                request.get(
+                  "user-agent"
+                )
+            }
+          );
+
+        await updateGenerationTask(
+          database,
+          taskRecordId,
+          {
+            status: "running",
+            stage: "settling",
+            progress: 98,
+            historyId:
+              historyRecord.id,
+            providerProgress:
+              "正在结算积分"
+          }
+        );
+
         const settlement =
           await authService.settleGenerationCredits(
             user.id,
@@ -283,6 +446,30 @@ export function createGenerationRouter(options: {
             ),
             "按实际成功生成图片数量结算"
           );
+
+        await updateGenerationTask(
+          database,
+          taskRecordId,
+          {
+            status: "success",
+            stage: "completed",
+            progress: 100,
+            actualImageCount,
+            providerTaskId:
+              result.taskId ||
+              result.requestId,
+            providerProgress:
+              result.progress ||
+              "100%",
+            historyId:
+              historyRecord.id,
+            actualPoints:
+              settlement.pointsCost,
+            refundedPoints:
+              settlement.refundAmount,
+            markCompleted: true
+          }
+        );
 
         await safeRecordUsage(
           authService,
@@ -311,7 +498,9 @@ export function createGenerationRouter(options: {
           pointsCost:
             settlement.pointsCost,
           refundAmount:
-            settlement.refundAmount
+            settlement.refundAmount,
+          taskRecordId,
+          historyRecord
         });
       }
       catch (error) {
@@ -342,6 +531,38 @@ export function createGenerationRouter(options: {
             );
           }
         }
+
+        await updateGenerationTask(
+          database,
+          taskRecordId,
+          {
+            status: "failed",
+            stage:
+              refunded
+                ? "refunded"
+                : "failed",
+            progress: 100,
+            actualImageCount: 0,
+            actualPoints: 0,
+            refundedPoints:
+              refunded
+                ? reservation?.pointsCost || 0
+                : 0,
+            errorCode:
+              generationErrorCode(error),
+            errorMessage,
+            providerProgress:
+              refunded
+                ? "生成失败，积分已退回"
+                : "生成失败",
+            markCompleted: true
+          }
+        ).catch((taskError) => {
+          console.error(
+            "更新任务失败状态失败",
+            taskError
+          );
+        });
 
         await safeRecordUsage(
           authService,
@@ -492,6 +713,62 @@ export function createGenerationRouter(options: {
           });
         }
 
+        const persistentTask =
+          await findGenerationTaskByProviderTaskId(
+            database,
+            user.id,
+            taskId
+          );
+
+        if (
+          persistentTask?.status ===
+            "success" &&
+          persistentTask.historyId
+        ) {
+          const historyRecord =
+            await historyService
+              .getByGenerationTaskId(
+                persistentTask.id,
+                user.id
+              );
+
+          if (historyRecord) {
+            return response.json({
+              success: true,
+              result: {
+                provider:
+                  provider as ProviderId,
+                model:
+                  usage.model,
+                images:
+                  historyRecord.images,
+                durationMs:
+                  historyRecord.durationMs ||
+                  0,
+                status:
+                  "completed",
+                progress:
+                  "100%",
+                cost:
+                  historyRecord.cost,
+                taskId
+              },
+              credits:
+                user.credits,
+              pointsCost:
+                persistentTask
+                  .actualPoints ||
+                0,
+              refundAmount:
+                persistentTask
+                  .refundedPoints,
+              taskRecordId:
+                persistentTask.id,
+              historyRecord
+            });
+          }
+        }
+
         const result =
           await getImageTask(
             provider as ProviderId,
@@ -499,10 +776,45 @@ export function createGenerationRouter(options: {
             usage.model
           );
 
+        if (
+          persistentTask &&
+          result.status !== "completed" &&
+          result.status !== "failed"
+        ) {
+          await updateGenerationTask(
+            database,
+            persistentTask.id,
+            {
+              status: "running",
+              stage: "processing",
+              progress:
+                parseProviderProgress(
+                  result.progress,
+                  Math.max(
+                    persistentTask.progress,
+                    45
+                  )
+                ),
+              providerProgress:
+                result.progress ||
+                "AI 正在生成画面"
+            }
+          );
+        }
+
         let credits = user.credits;
         let pointsCost =
           usage.pointsCost || 0;
         let refundAmount = 0;
+
+        // 异步历史记录外层作用域
+        let historyRecord:
+          Awaited<
+            ReturnType<
+              HistoryService["save"]
+            >
+          > |
+          undefined;
 
         if (
           result.status === "completed" ||
@@ -522,6 +834,68 @@ export function createGenerationRouter(options: {
                     usage.model
                   )?.points || 0
                 );
+
+          if (
+            successful &&
+            persistentTask
+          ) {
+            const runtimeModel =
+              modelSettingsService.get(
+                provider,
+                usage.model
+              );
+
+            historyRecord =
+              await archiveGenerationResult(
+                {
+                  database,
+                  historyService,
+                  taskId:
+                    persistentTask.id,
+                  userId:
+                    user.id,
+                  username:
+                    user.username,
+                  provider:
+                    "lingke",
+                  providerName:
+                    runtimeModel
+                      ?.capability
+                      .providerName ||
+                    "百嘉瑞AI",
+                  model:
+                    usage.model,
+                  prompt:
+                    usage.prompt ||
+                    "AI 图片生成",
+                  operation:
+                    usage.operation,
+                  size:
+                    usage.size,
+                  result,
+                  clientIp:
+                    request.ip,
+                  userAgent:
+                    request.get(
+                      "user-agent"
+                    )
+                }
+              );
+
+            await updateGenerationTask(
+              database,
+              persistentTask.id,
+              {
+                status: "running",
+                stage: "settling",
+                progress: 98,
+                historyId:
+                  historyRecord.id,
+                providerProgress:
+                  "正在结算积分"
+              }
+            );
+          }
 
           const finalized =
             await authService.finalizeAsyncUsage(
@@ -557,6 +931,47 @@ export function createGenerationRouter(options: {
             finalized.pointsCost;
           refundAmount =
             finalized.refundAmount;
+
+          if (persistentTask) {
+            await updateGenerationTask(
+              database,
+              persistentTask.id,
+              {
+                status:
+                  successful
+                    ? "success"
+                    : "failed",
+                stage:
+                  successful
+                    ? "completed"
+                    : finalized.refunded
+                      ? "refunded"
+                      : "failed",
+                progress: 100,
+                actualImageCount:
+                  result.images.length,
+                historyId:
+                  historyRecord?.id,
+                actualPoints:
+                  finalized.pointsCost,
+                refundedPoints:
+                  finalized.refundAmount,
+                providerProgress:
+                  result.progress ||
+                  "100%",
+                errorCode:
+                  successful
+                    ? undefined
+                    : "PROVIDER_TASK_FAILED",
+                errorMessage:
+                  successful
+                    ? undefined
+                    : result.error ||
+                      "异步任务未返回图片",
+                markCompleted: true
+              }
+            );
+          }
         }
 
         return response.json({
@@ -564,7 +979,10 @@ export function createGenerationRouter(options: {
           result,
           credits,
           pointsCost,
-          refundAmount
+          refundAmount,
+          taskRecordId:
+            persistentTask?.id,
+          historyRecord
         });
       }
       catch (error) {
@@ -703,6 +1121,70 @@ async function rejectGeneration(
       message
     }
   });
+}
+
+function readTaskThumbnail(
+  value: unknown
+): string | undefined {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return undefined;
+  }
+
+  const thumbnail =
+    (value as Record<string, unknown>)
+      .taskThumbnail;
+
+  return (
+    typeof thumbnail === "string" &&
+    thumbnail.startsWith("data:image/") &&
+    thumbnail.length <= 700_000
+  )
+    ? thumbnail
+    : undefined;
+}
+
+function generationErrorCode(
+  error: unknown
+): string {
+  if (error instanceof AuthError) {
+    return error.code;
+  }
+
+  if (error instanceof ZodError) {
+    return "INVALID_REQUEST";
+  }
+
+  if (error instanceof ProviderHttpError) {
+    return "PROVIDER_ERROR";
+  }
+
+  return "INTERNAL_ERROR";
+}
+
+function readBatchItemId(
+  value: unknown
+): string | undefined {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return undefined;
+  }
+
+  const candidate =
+    (value as {
+      batchItemId?: unknown
+    }).batchItemId;
+
+  return (
+    typeof candidate === "string" &&
+    /^[0-9a-f-]{36}$/i.test(candidate)
+  )
+    ? candidate
+    : undefined;
 }
 
 function readPositiveEnv(

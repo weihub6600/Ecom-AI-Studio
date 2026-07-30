@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RegistrationSettingsPanel from "./components/RegistrationSettingsPanel.vue";
 import { computed, onMounted, ref } from "vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
@@ -14,8 +15,9 @@ import type {
   UsageRecord
 } from "./types";
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
+import ApiProviderManager from "./components/ApiProviderManager.vue";
 
-type Section = "dashboard" | "users" | "cards" | "models" | "audit";
+type Section = "dashboard" | "users" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -63,6 +65,7 @@ const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
+  { id: "providers", label: "API 服务商", hint: "新增服务商和模型参数" },
   { id: "audit", label: "操作审计", hint: "站长操作追踪" }
 ];
 
@@ -364,7 +367,7 @@ function auditLabel(action: string) {
 
   <div v-else class="admin-v10-shell">
     <aside class="admin-v10-sidebar">
-      <a class="admin-v10-brand" href="/"><span>B</span><div><strong>BJR AI</strong><small>ADMIN CONSOLE</small></div></a>
+      <a class="admin-v10-brand" href="/"><span>Z</span><div><strong>ZHE AI</strong><small>ADMIN CONSOLE</small></div></a>
       <nav>
         <button v-for="item in sections" :key="item.id" type="button" :class="{ active: activeSection === item.id }" @click="changeSection(item.id)">
           <span>{{ item.label.slice(0, 1) }}</span><div><strong>{{ item.label }}</strong><small>{{ item.hint }}</small></div>
@@ -378,7 +381,7 @@ function auditLabel(action: string) {
 
     <main class="admin-v10-main">
       <header class="admin-v10-topbar">
-        <div><span>V10 · MYSQL ADMIN</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
+        <div><span>V13.7 · 云端后台</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
         <div class="admin-v10-account"><span>{{ currentUser?.username.slice(0, 1).toUpperCase() }}</span><div><strong>{{ currentUser?.username }}</strong><small>站长账号</small></div></div>
       </header>
 
@@ -393,7 +396,7 @@ function auditLabel(action: string) {
             <article><span>今日生图任务</span><strong>{{ dashboard.today.usage }}</strong><small>成功 {{ dashboard.today.success }} · 失败 {{ dashboard.today.failed }}</small></article>
             <article><span>今日生成图片</span><strong>{{ dashboard.today.images }}</strong><small>平均耗时 {{ formatDuration(dashboard.today.averageDurationMs) }}</small></article>
             <article><span>今日消费积分</span><strong>{{ formatPoints(dashboard.today.spentPoints) }}</strong><small>充值 {{ formatPoints(dashboard.today.rechargedPoints) }}</small></article>
-            <article><span>服务器历史</span><strong>{{ dashboard.storage.histories }}</strong><small>保存图片 {{ dashboard.storage.images }}</small></article>
+            <article><span>云端历史</span><strong>{{ dashboard.storage.histories }}</strong><small>保存图片 {{ dashboard.storage.images }}</small></article>
           </div>
           <div class="admin-v10-dashboard-grid">
             <article class="admin-v10-card chart-card">
@@ -414,6 +417,7 @@ function auditLabel(action: string) {
       </section>
 
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">
+        <RegistrationSettingsPanel />
         <div class="admin-v10-toolbar">
           <input v-model="userSearch" type="search" placeholder="搜索用户名" @keyup.enter="loadUsers(1)" />
           <select v-model="userStatus"><option value="">全部状态</option><option value="pending">待审核</option><option value="active">已启用</option><option value="disabled">已封禁</option><option value="rejected">已拒绝</option></select>
@@ -467,7 +471,14 @@ function auditLabel(action: string) {
         <div class="model-setting-grid"><article v-for="model in modelSettings" :key="modelKey(model)" class="admin-v10-card"><div class="model-setting-title"><span>{{ model.providerName.slice(0,1) }}</span><div><strong>{{ model.providerName }} · {{ model.name }}</strong><small>{{ model.model }}</small></div><i :class="model.configured ? 'ready' : 'offline'">{{ model.configured ? 'API 已配置' : '缺少 API Key' }}</i></div><p>{{ model.description }}</p><div class="model-setting-meta"><span>最多 {{ model.maxOutputImages }} 张</span><span>{{ model.asynchronous ? '异步任务' : '同步任务' }}</span></div><div class="model-setting-form"><label><input v-model="modelDraft(model).enabled" type="checkbox" />允许前台使用</label><label>单张积分<input v-model="modelDraft(model).points" type="number" min="0" step="0.01" /></label></div><button class="save-model" :disabled="savingModelKey === modelKey(model)" @click="saveModel(model)">{{ savingModelKey === modelKey(model) ? '保存中…' : '保存设置' }}</button></article></div>
       </section>
 
-      <section v-else class="admin-v10-section">
+            <section
+        v-else-if="activeSection === 'providers'"
+        class="admin-v10-section"
+      >
+        <ApiProviderManager />
+      </section>
+
+<section v-else class="admin-v10-section">
         <div class="admin-v10-toolbar"><input v-model="auditSearch" type="search" placeholder="搜索站长、对象或操作内容" @keyup.enter="loadAudit(1)" /><select v-model="auditAction"><option value="">全部操作</option><option value="user.update">更新用户</option><option value="user.force_logout">强制退出</option><option value="credit.adjust">调整积分</option><option value="card.generate">生成卡密</option><option value="card.delete">删除卡密</option><option value="model.update">模型设置</option></select><button @click="loadAudit(1)">查询</button><span>共 {{ auditPagination.total }} 条</span></div>
         <div class="admin-v10-card audit-list"><article v-for="record in auditRecords" :key="record.id"><div class="audit-icon">{{ auditLabel(record.action).slice(0,1) }}</div><div><div><strong>{{ auditLabel(record.action) }}</strong><i>{{ record.actorUsername }}</i></div><p>{{ record.summary }}</p><small>{{ formatDate(record.createdAt) }} · {{ record.clientIp || '未记录 IP' }}<template v-if="record.targetId"> · {{ record.targetId }}</template></small></div></article><div v-if="!auditRecords.length" class="admin-v10-empty">暂无审计记录</div></div>
         <div class="admin-v10-pagination"><button :disabled="auditPagination.page <= 1" @click="loadAudit(auditPagination.page - 1)">上一页</button><span>{{ auditPagination.page }} / {{ auditPagination.totalPages }}</span><button :disabled="auditPagination.page >= auditPagination.totalPages" @click="loadAudit(auditPagination.page + 1)">下一页</button></div>
