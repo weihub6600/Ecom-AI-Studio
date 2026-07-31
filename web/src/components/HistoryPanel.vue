@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import type { ServerHistoryRecord } from "../types";
 import { formatDate, formatSizeTitle, providerDisplayName } from "../utils/format";
 
@@ -8,7 +7,6 @@ const props = defineProps<{
   activeHistoryId: string | null;
   authenticated: boolean;
   favorites: Set<string>;
-  filterMode: "all" | "favorites";
 }>();
 
 const emit = defineEmits<{
@@ -18,94 +16,38 @@ const emit = defineEmits<{
   clear: [];
   showResult: [];
   toggleFavorite: [id: string];
-  "update:filterMode": [value: "all" | "favorites"];
 }>();
 
-const searchQuery = ref("");
-
-const filteredRecords = computed(() => {
-  let list = props.records;
-  // 收藏筛选
-  if (props.filterMode === "favorites") {
-    list = list.filter((r) => props.favorites.has(r.id));
-  }
-  // 关键词搜索
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    list = list.filter(
-      (r) =>
-        (r.prompt || "").toLowerCase().includes(q) ||
-        (r.operation || "").toLowerCase().includes(q) ||
-        (r.model || "").toLowerCase().includes(q) ||
-        (r.size || "").toLowerCase().includes(q)
-    );
-  }
-  return list;
-});
 </script>
 
 <template>
   <section id="history-panel" class="history-panel panel">
-    <div class="history-heading">
-      <div>
-        <span class="step-number">03</span>
-        <div>
-          <h2>生成历史</h2>
-          <p>最近 20 条来自云端，可在不同设备登录后继续查看</p>
-        </div>
-      </div>
-
-      <div class="history-heading-actions">
-        <button
-          type="button"
-          class="section-jump-button"
-          aria-controls="result-panel"
-          @click="emit('showResult')"
-        >
-          返回结果
-        </button>
-        <button
-          v-if="props.records.length"
-          type="button"
-          class="history-clear"
-          @click="emit('clear')"
-        >
-          清空列表
-        </button>
-      </div>
+<div class="history-heading">
+  <div>
+    <span class="step-number">03</span>
+    <div>
+      <h2>生成历史</h2>
+      <p>首页仅展示最近 3 条，更多记录请进入用户后台查看</p>
     </div>
+  </div>
 
-    <!-- 搜索与筛选栏 -->
-    <div class="history-toolbar" v-if="props.records.length">
-      <div class="history-search">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="搜索 prompt、模式、规格..."
-          class="history-search-input"
-        />
-        <button v-if="searchQuery" type="button" class="search-clear" @click="searchQuery = ''">✕</button>
-        <button type="button" class="search-btn" title="搜索">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        </button>
-      </div>
-      <div class="history-filter-btns">
-        <button
-          type="button"
-          :class="{ active: props.filterMode === 'all' }"
-          @click="emit('update:filterMode', 'all')"
-        >全部</button>
-        <button
-          type="button"
-          :class="{ active: props.filterMode === 'favorites' }"
-          @click="emit('update:filterMode', 'favorites')"
-        >⭐ 收藏</button>
-      </div>
-    </div>
+  <div class="history-heading-actions">
+    <button
+      type="button"
+      class="section-jump-button"
+      aria-controls="result-panel"
+      @click="emit('showResult')"
+    >
+      返回结果
+    </button>
+  </div>
+</div>
 
-    <div v-if="filteredRecords.length" class="history-grid">
+
+
+    <div v-if="props.records.length" class="history-grid">
       <article
-        v-for="record in filteredRecords"
+        v-for="record in props.records"
         :key="record.id"
         class="history-card"
         :class="{ active: props.activeHistoryId === record.id }"
@@ -139,15 +81,11 @@ const filteredRecords = computed(() => {
     </div>
 
     <div v-else class="history-empty">
-      {{
-        searchQuery
-          ? `未找到与"${searchQuery}"匹配的历史记录`
-          : props.filterMode === "favorites"
-            ? "暂无收藏记录，点击历史卡片中的 ☆ 收藏 即可标记"
-            : props.authenticated
-              ? "当前账号还没有历史。下一次生成成功后会在本机保留最近 20 条，同时完整归档到云端。"
-              : "登录后可使用 AI 生图，并查看当前账号在本机保存的最近历史。"
-      }}
-    </div>
+  {{
+    props.authenticated
+      ? "当前账号还没有生成历史。"
+      : "登录后可查看生成历史。"
+  }}
+</div>
   </section>
 </template>

@@ -27,7 +27,7 @@ import { formatSizeTitle, greatestCommonDivisor, providerDisplayName } from "./u
 
 type GenerationPhase = "queue" | "analysis" | "creating" | "rendering" | "complete";
 
-const DEFAULT_PROMPT = "为上传的商品生成高级简约电商主图，浅色摄影棚背景，柔和自然投影，保持商品外观、包装文字、Logo、颜色和结构完全不变，主体居中，商业产品摄影，高级质感。";
+const DEFAULT_PROMPT = "";
 const INTRO_COLLAPSED_STORAGE_KEY = "ecom-ai-studio:intro-collapsed";
 const FAVORITES_STORAGE_KEY = "ecom-ai-studio:favorites";
 const HISTORY_LIMIT = 3;
@@ -97,7 +97,6 @@ let generationStartedAt = 0;
 const introCollapsed = ref(false);
 const lightboxIndex = ref<number | null>(null);
 const favorites = ref<Set<string>>(new Set(loadFavorites()));
-const historyFilterMode = ref<"all" | "favorites">("all");
 
 const providers = computed(() => {
   const unique = new Map<ProviderId, string>();
@@ -883,7 +882,7 @@ async function restoreHistory(record: ServerHistoryRecord, scrollToResult = true
 }
 
 async function deleteHistory(record: ServerHistoryRecord) {
-  if (!window.confirm("确定从生成历史中移除这条记录吗？服务器原图仍会保留。")) return;
+  if (!window.confirm("确定删除这条生成历史及服务器原图吗？删除后无法恢复。")) return;
   try {
     await apiRequest<{ success: boolean }>(`/api/history/${encodeURIComponent(record.id)}`, { method: "DELETE" });
     historyRecords.value = historyRecords.value.filter((item) => item.id !== record.id);
@@ -900,7 +899,7 @@ async function handleReGenerate(record: ServerHistoryRecord) {
 }
 
 async function clearHistory() {
-  if (!historyRecords.value.length || !window.confirm("确定清空当前账号的网页历史吗？服务器原图仍会保留。")) return;
+  if (!historyRecords.value.length || !window.confirm("确定清空当前账号的生成历史及服务器原图吗？删除后无法恢复。")) return;
   try {
     await apiRequest<{ success: boolean }>("/api/history", { method: "DELETE" });
     historyRecords.value = [];
@@ -1469,14 +1468,12 @@ async function downloadAllZip() {
             :active-history-id="activeHistoryId"
             :authenticated="isAuthenticated"
             :favorites="favorites"
-            :filter-mode="historyFilterMode"
             @restore="restoreHistory"
             @reGenerate="handleReGenerate"
             @remove="deleteHistory"
             @clear="clearHistory"
             @showResult="scrollToSection('result-panel')"
             @toggleFavorite="toggleFavorite"
-            @update:filterMode="historyFilterMode = $event"
           />
           <a
             class="history-more-link"

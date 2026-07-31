@@ -35,7 +35,7 @@ async function loadHistory() {
         history:
           ServerHistoryRecord[];
       }>(
-        "/api/history?limit=100"
+        "/api/history?limit=20"
       );
 
     records.value =
@@ -58,7 +58,7 @@ async function removeRecord(
 ) {
   if (
     !window.confirm(
-      "确定移除这条生成历史吗？"
+      "确定删除这条生成历史及服务器原图吗？删除后无法恢复。"
     )
   ) {
     return;
@@ -85,7 +85,7 @@ async function removeRecord(
       <div>
         <span>GENERATION HISTORY</span>
         <h2>全部生成历史</h2>
-        <p>首页仅展示最近 3 条，这里保留当前账号的完整记录。</p>
+        <p>每个账号最多保存 20 张图片，最长保存 7 天；超过限制的旧图片会自动删除。</p>
       </div>
       <button type="button" @click="loadHistory">刷新</button>
     </header>
