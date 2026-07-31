@@ -352,7 +352,10 @@ function modelKey(model: Pick<AdminModelSetting, "provider" | "model">) { return
 function modelDraft(model: AdminModelSetting) { return modelDrafts.value[modelKey(model)] || (modelDrafts.value[modelKey(model)] = { enabled: model.enabled, points: String(model.points) }); }
 function statusLabel(status: AdminUserSummary["status"]) { return status === "pending" ? "待审核" : status === "active" ? "已启用" : status === "disabled" ? "已封禁" : "已拒绝"; }
 function usageStatusLabel(status: UsageRecord["status"]) { return status === "success" ? "成功" : status === "submitted" ? "处理中" : "失败"; }
-function creditTitle(record: CreditRecord) { return record.type === "generation_charge" ? "AI 生图扣费" : record.type === "generation_refund" ? "生成退款" : record.type === "card_recharge" ? "卡密充值" : record.amount >= 0 ? "站长增加积分" : "站长扣减积分"; }
+function creditTitle(record: CreditRecord) {
+  if (record.note === "新用户注册赠送") return "新用户注册赠送";
+  return record.type === "generation_charge" ? "AI 生图扣费" : record.type === "generation_refund" ? "生成退款" : record.type === "card_recharge" ? "卡密充值" : record.amount >= 0 ? "站长增加积分" : "站长扣减积分";
+}
 function auditLabel(action: string) {
   const labels: Record<string, string> = { "user.update": "更新用户", "user.force_logout": "强制退出", "credit.adjust": "调整积分", "card.generate": "生成卡密", "card.delete": "删除卡密", "model.update": "模型设置" };
   return labels[action] || action;

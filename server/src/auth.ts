@@ -431,7 +431,12 @@ export function createAuthService(options: AuthServiceOptions) {
       );
 
       const user = await requireUser(connection, userId);
-      if (!isFirstConfiguredAdmin) return { user: toPublicUser(user), pending: true };
+      if (status !== "active") {
+        return {
+          user: toPublicUser(user),
+          pending: true
+        };
+      }
 
       const { token, tokenHash, expiresAt } = createSessionToken(sessionTtlSeconds);
       await connection.execute(

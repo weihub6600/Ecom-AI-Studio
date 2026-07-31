@@ -22,6 +22,9 @@ import {
   createHistoryService
 } from "./history.js";
 import {
+  createHistoryRetentionService
+} from "./services/history-retention.js";
+import {
   startAsyncReconciliation
 } from "./services/async-reconciliation.js";
 import {
@@ -150,6 +153,31 @@ export async function startServer():
         )
     });
 
+  const historyRetentionService =
+    createHistoryRetentionService({
+      database,
+      generatedDir:
+        historyService.generatedDir,
+      maxImagesPerUser:
+        Number(
+          process.env
+            .HISTORY_MAX_IMAGES_PER_USER ||
+          20
+        ),
+      maxAgeDays:
+        Number(
+          process.env
+            .HISTORY_MAX_AGE_DAYS ||
+          7
+        ),
+      cleanupIntervalMs:
+        Number(
+          process.env
+            .HISTORY_CLEANUP_INTERVAL_MS ||
+          60_000
+        )
+    });
+
   const healthService =
     createHealthService({
       database,
@@ -200,6 +228,8 @@ export async function startServer():
     modelSettingsService.initialize(),
     batchJobService.initialize()
   ]);
+
+  await historyRetentionService.start();
 
   const health =
     await healthService.check();
@@ -295,6 +325,7 @@ export async function startServer():
 
     stopReconciliation();
     stopBatchWorker();
+    historyRetentionService.stop();
 
     await new Promise<void>(
       (resolve) => {

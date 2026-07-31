@@ -115,8 +115,9 @@ export function createAuthRouter(options: {
       try {
         const body =
           request.body as {
-            requiresApproval?:
-              unknown;
+            requiresApproval?: unknown;
+            registrationBonusEnabled?: unknown;
+            registrationBonusPoints?: unknown;
           };
 
         const actor =
@@ -126,11 +127,10 @@ export function createAuthRouter(options: {
 
         const registration =
           await registrationSettingsService
-            .update(
-              body
-                ?.requiresApproval,
-              actor.id
-            );
+              .update(
+                body || {},
+                actor.id
+              );
 
         return response.json({
           success: true,
@@ -332,6 +332,12 @@ export function createAuthRouter(options: {
               .requiresApproval
           );
 
+        const registeredUser =
+          await registrationSettingsService
+            .grantRegistrationBonus(
+              result.user
+            );
+
         if (result.token) {
           response.setHeader(
             "Set-Cookie",
@@ -345,7 +351,7 @@ export function createAuthRouter(options: {
 
         return response.status(201).json({
           success: true,
-          user: result.user,
+          user: registeredUser,
           pending: result.pending
         });
       } catch (error) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 import type { AuthUser, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
 import { displayProviderText, formatBytes, formatPoints, providerDisplayName } from "../utils/format";
 
@@ -46,14 +46,97 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
 const dragging = ref(false);
 
-const promptTemplates = [
-  "为上传的商品生成高级简约电商主图，浅色摄影棚背景，柔和自然投影，保持商品外观、包装文字、Logo、颜色和结构完全不变，主体居中，商业产品摄影，高级质感。",
-  "生成清爽蓝白科技风电商首屏，加入柔和渐变、透明玻璃平台和克制的光效，商品保持真实比例和包装细节，画面干净，适合品牌官网。",
-  "生成日式生活方式场景，原木桌面、自然窗光和浅色背景，商品作为视觉中心，构图留白，保持商品标签和包装不变。",
-  "生成纯白背景商品效果图，修正光线和阴影，去除杂乱背景，不改变商品本体、形状、文字和Logo，适合电商平台白底主图。"
-];
+interface PromptPreset {
+  id: string;
+  name: string;
+  prompt: string;
+}
 
-const promptTemplateNames = ["高级棚拍", "科技首屏", "日式场景", "白底精修"];
+const MAX_PROMPT_PRESETS = 7;
+const PROMPT_PRESET_STORAGE_PREFIX = "ecom-ai-studio:prompt-presets:";
+const promptPresets = ref<PromptPreset[]>([]);
+
+onMounted(loadPromptPresets);
+
+watch(
+  () => props.authUser?.id,
+  () => loadPromptPresets()
+);
+
+function promptPresetStorageKey(): string {
+  return `${PROMPT_PRESET_STORAGE_PREFIX}${props.authUser?.id || "guest"}`;
+}
+
+function loadPromptPresets() {
+  try {
+    const raw = window.localStorage.getItem(promptPresetStorageKey());
+    const parsed = raw ? JSON.parse(raw) : [];
+    promptPresets.value = Array.isArray(parsed)
+      ? parsed
+          .filter((item): item is PromptPreset => Boolean(
+            item &&
+            typeof item.id === "string" &&
+            typeof item.name === "string" &&
+            typeof item.prompt === "string" &&
+            item.name.trim() &&
+            item.prompt.trim()
+          ))
+          .slice(0, MAX_PROMPT_PRESETS)
+      : [];
+  } catch {
+    promptPresets.value = [];
+  }
+}
+
+function persistPromptPresets() {
+  window.localStorage.setItem(
+    promptPresetStorageKey(),
+    JSON.stringify(promptPresets.value.slice(0, MAX_PROMPT_PRESETS))
+  );
+}
+
+function createPresetId(): string {
+  return typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function saveCurrentPrompt() {
+  const value = prompt.value.trim();
+  if (!value) {
+    window.alert("请先填写提示词，再保存预设。");
+    promptInput.value?.focus();
+    return;
+  }
+  if (promptPresets.value.length >= MAX_PROMPT_PRESETS) {
+    window.alert(`最多只能保存 ${MAX_PROMPT_PRESETS} 组预设提示词，请先删除一组。`);
+    return;
+  }
+
+  const suggestedName = `预设 ${promptPresets.value.length + 1}`;
+  const name = window.prompt("请输入预设名称（最多 20 个字符）", suggestedName)?.trim();
+  if (!name) return;
+
+  promptPresets.value = [
+    ...promptPresets.value,
+    {
+      id: createPresetId(),
+      name: name.slice(0, 20),
+      prompt: value
+    }
+  ];
+  persistPromptPresets();
+}
+
+function usePreset(preset: PromptPreset) {
+  prompt.value = preset.prompt;
+}
+
+function deletePreset(preset: PromptPreset) {
+  if (!window.confirm(`确定删除预设“${preset.name}”吗？`)) return;
+  promptPresets.value = promptPresets.value.filter((item) => item.id !== preset.id);
+  persistPromptPresets();
+}
 
 function openFileDialog() {
   fileInput.value?.click();
@@ -69,10 +152,6 @@ function onFileChange(event: Event) {
 function onDrop(event: DragEvent) {
   dragging.value = false;
   emit("filesSelected", Array.from(event.dataTransfer?.files || []));
-}
-
-function useTemplate(template: string) {
-  prompt.value = template;
 }
 
 async function useCustomPrompt() {
@@ -271,7 +350,7 @@ async function useCustomPrompt() {
 
     <div class="field-block">
       <div class="label-row">
-        <label for="prompt">画面描述</label>
+        <label for="prompt">提示词</label>
         <span>{{ prompt.length }}/5000</span>
       </div>
       <textarea
@@ -280,20 +359,32 @@ async function useCustomPrompt() {
         v-model="prompt"
         maxlength="5000"
         rows="6"
-        placeholder="描述商品、背景、构图、光线和需要保留的细节"
+        placeholder="请输入提示词，例如主体、场景、构图、光线和必须保留的细节"
       ></textarea>
 
       <div class="template-row">
-        <button type="button" @click="useCustomPrompt">自定义</button>
+        <button type="button" @click="useCustomPrompt">清空提示词</button>
         <button
-          v-for="(template, index) in promptTemplates"
-          :key="index"
           type="button"
-          @click="useTemplate(template)"
+          :disabled="!prompt.trim() || promptPresets.length >= MAX_PROMPT_PRESETS"
+          @click="saveCurrentPrompt"
         >
-          {{ promptTemplateNames[index] }}
+          保存为预设（{{ promptPresets.length }}/{{ MAX_PROMPT_PRESETS }}）
+        </button>
+        <button
+          v-for="preset in promptPresets"
+          :key="preset.id"
+          type="button"
+          :title="`点击使用；双击删除：${preset.name}`"
+          @click="usePreset(preset)"
+          @dblclick.prevent="deletePreset(preset)"
+        >
+          {{ preset.name }}
         </button>
       </div>
+      <p v-if="promptPresets.length" class="field-hint">
+        已保存的预设仅属于当前账号和当前浏览器；点击使用，双击删除。
+      </p>
     </div>
 
     <div v-if="props.selectedModel?.supportsNegativePrompt" class="field-block">

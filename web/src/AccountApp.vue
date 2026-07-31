@@ -248,6 +248,10 @@ function usageLabel(
 function creditTitle(
   record: CreditRecord
 ): string {
+  if (record.note === "新用户注册赠送") {
+    return "新用户注册赠送";
+  }
+
   if (
     record.type ===
       "generation_charge"
