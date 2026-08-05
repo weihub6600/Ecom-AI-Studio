@@ -47,6 +47,18 @@ const loading =
 const errorMessage =
   ref("");
 
+const redeemCode =
+  ref("");
+
+const redeeming =
+  ref(false);
+
+const redeemMessage =
+  ref("");
+
+const redeemError =
+  ref("");
+
 const sections:
   Array<{
     id: AccountSection;
@@ -76,7 +88,7 @@ const sections:
     {
       id: "credits",
       label: "积分明细",
-      hint: "余额与交易流水"
+      hint: "卡密兑换与交易流水"
     }
   ];
 
@@ -199,6 +211,53 @@ function updateBalance(
     credits: value
   };
 }
+
+async function redeemCard() {
+  const code = redeemCode.value.trim();
+
+  redeemMessage.value = "";
+  redeemError.value = "";
+
+  if (!code) {
+    redeemError.value = "请输入卡密";
+    return;
+  }
+
+  redeeming.value = true;
+
+  try {
+    const result = await apiRequest<{
+      user: AuthUser;
+      transaction: CreditRecord;
+    }>("/api/account/redeem", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ code })
+    });
+
+    user.value = result.user;
+    credits.value = [
+      result.transaction,
+      ...credits.value.filter(
+        (item) => item.id !== result.transaction.id
+      )
+    ];
+
+    redeemCode.value = "";
+    redeemMessage.value =
+      `兑换成功，已到账 ${formatPoints(result.transaction.amount)} 积分`;
+  } catch (error) {
+    redeemError.value =
+      error instanceof Error
+        ? error.message
+        : "卡密兑换失败";
+  } finally {
+    redeeming.value = false;
+  }
+}
+
 
 async function logout() {
   try {
@@ -404,6 +463,39 @@ function creditTitle(
             <p>当前余额 {{ displayCredits }}，可用模型价格 {{ prices.length }} 项。</p>
           </div>
         </header>
+
+        <div v-if="user.role !== 'admin'" class="account-redeem-card">
+          <div class="account-redeem-copy">
+            <span>REDEEM CODE</span>
+            <h3>卡密兑换积分</h3>
+            <p>输入站长发放的卡密，兑换成功后积分立即到账。</p>
+          </div>
+
+          <form @submit.prevent="redeemCard">
+            <input
+              v-model="redeemCode"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="请输入卡密"
+              :disabled="redeeming"
+            />
+            <button
+              type="submit"
+              :disabled="redeeming || !redeemCode.trim()"
+            >
+              {{ redeeming ? '兑换中…' : '立即兑换' }}
+            </button>
+          </form>
+
+          <p v-if="redeemMessage" class="account-redeem-result success">
+            {{ redeemMessage }}
+          </p>
+          <p v-if="redeemError" class="account-redeem-result error">
+            {{ redeemError }}
+          </p>
+        </div>
 
         <div class="account-credit-grid">
           <article v-for="record in credits" :key="record.id">
