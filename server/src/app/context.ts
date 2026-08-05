@@ -3,6 +3,9 @@ import type { AuthService } from "../auth.js";
 import type {
   RegistrationSettingsService
 } from "../services/registration-settings.js";
+import type {
+  InvitationRewardService
+} from "../services/invitation-rewards.js";
 import type { HistoryService } from "../history.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
 import type { AuditLogService } from "../services/audit-log.js";
@@ -19,6 +22,8 @@ export interface AppContext {
   authService: AuthService;
   registrationSettingsService:
     RegistrationSettingsService;
+  invitationRewardService:
+    InvitationRewardService;
   historyService: HistoryService;
   modelSettingsService: ModelSettingsService;
   auditLogService: AuditLogService;

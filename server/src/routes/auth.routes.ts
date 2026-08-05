@@ -5,6 +5,9 @@ import type {
   RegistrationSettingsService
 } from "../services/registration-settings.js";
 import type {
+  InvitationRewardService
+} from "../services/invitation-rewards.js";
+import type {
   RequestHandler
 } from "express";
 import {
@@ -35,6 +38,8 @@ export function createAuthRouter(options: {
 
   registrationSettingsService:
     RegistrationSettingsService;
+  invitationRewardService:
+    InvitationRewardService;
   requireAuth:
     RequestHandler;
   requireAdmin:
@@ -44,6 +49,7 @@ export function createAuthRouter(options: {
     securityService,
     secureAuthCookie,
     registrationSettingsService,
+    invitationRewardService,
     requireAuth,
     requireAdmin
   } = options;
@@ -63,10 +69,15 @@ export function createAuthRouter(options: {
       response
     ) => {
       try {
+        const [registration, invitation] =
+          await Promise.all([
+            registrationSettingsService.get(),
+            invitationRewardService.getPublicSettings()
+          ]);
+
         return response.json({
-          registration:
-            await registrationSettingsService
-              .get()
+          registration,
+          invitation
         });
       }
       catch (error) {
@@ -312,6 +323,7 @@ export function createAuthRouter(options: {
           password?: unknown;
           captchaId?: unknown;
           captchaAnswer?: unknown;
+          inviteCode?: unknown;
         };
 
         await authService
@@ -338,6 +350,22 @@ export function createAuthRouter(options: {
               result.user
             );
 
+        let invitedUser = registeredUser;
+        try {
+          invitedUser =
+            await invitationRewardService
+              .recordRegistration(
+                registeredUser,
+                body?.inviteCode
+              );
+        }
+        catch (invitationError) {
+          console.error(
+            "记录邀请关系失败",
+            invitationError
+          );
+        }
+
         if (result.token) {
           response.setHeader(
             "Set-Cookie",
@@ -351,7 +379,7 @@ export function createAuthRouter(options: {
 
         return response.status(201).json({
           success: true,
-          user: registeredUser,
+          user: invitedUser,
           pending: result.pending
         });
       } catch (error) {
@@ -466,6 +494,21 @@ export function createAuthRouter(options: {
             }
           );
 
+        let activatedUser = result.user;
+        try {
+          activatedUser =
+            await invitationRewardService
+              .rewardActivatedUser(
+                result.user.id
+              ) || result.user;
+        }
+        catch (invitationError) {
+          console.error(
+            "补发邀请奖励失败",
+            invitationError
+          );
+        }
+
         await securityService.resetLimit(
           "auth.login.account",
           accountKey
@@ -482,7 +525,7 @@ export function createAuthRouter(options: {
 
         return response.json({
           success: true,
-          user: result.user
+          user: activatedUser
         });
       } catch (error) {
         if (

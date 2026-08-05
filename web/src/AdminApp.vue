@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import RegistrationSettingsPanel from "./components/RegistrationSettingsPanel.vue";
+import InvitationSettingsPanel from "./components/InvitationSettingsPanel.vue";
 import { computed, onMounted, ref } from "vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
@@ -421,6 +422,7 @@ function auditLabel(action: string) {
 
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">
         <RegistrationSettingsPanel />
+        <InvitationSettingsPanel />
         <div class="admin-v10-toolbar">
           <input v-model="userSearch" type="search" placeholder="搜索用户名" @keyup.enter="loadUsers(1)" />
           <select v-model="userStatus"><option value="">全部状态</option><option value="pending">待审核</option><option value="active">已启用</option><option value="disabled">已封禁</option><option value="rejected">已拒绝</option></select>

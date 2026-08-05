@@ -25,6 +25,9 @@ import {
   createAuthRouter
 } from "../routes/auth.routes.js";
 import {
+  createInvitationRouter
+} from "../routes/invitation.routes.js";
+import {
   createAccountRouter
 } from "../routes/account.routes.js";
 import {
@@ -175,13 +178,22 @@ export function createApp(
       requireAuth,
     registrationSettingsService:
       context.registrationSettingsService,
+    invitationRewardService:
+      context.invitationRewardService,
     authService: context.authService,
     securityService,
     secureAuthCookie:
       context.secureAuthCookie
   }));
 
-  app.use(createAccountRouter({
+    app.use(createInvitationRouter({
+    invitationRewardService:
+      context.invitationRewardService,
+    requireAuth,
+    requireAdmin
+  }));
+
+app.use(createAccountRouter({
     database: context.database,
     authService: context.authService,
     modelSettingsService:
@@ -205,6 +217,8 @@ export function createApp(
       context.auditLogService,
     adminQueryService:
       context.adminQueryService,
+    invitationRewardService:
+      context.invitationRewardService,
     requireAuth,
     requireAdmin
   }));

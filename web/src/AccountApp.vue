@@ -11,6 +11,7 @@ import {
 import WorkLibrary from "./components/WorkLibrary.vue";
 import BatchStudio from "./components/BatchStudio.vue";
 import AccountHistory from "./components/AccountHistory.vue";
+import InvitationRewardsPanel from "./components/InvitationRewardsPanel.vue";
 import type {
   AuthUser,
   CreditRecord,
@@ -27,6 +28,7 @@ type AccountSection =
   | "history"
   | "batch"
   | "usage"
+  | "invites"
   | "credits";
 
 const user =
@@ -84,6 +86,11 @@ const sections:
       id: "usage",
       label: "使用记录",
       hint: "调用结果与模型"
+    },
+    {
+      id: "invites",
+      label: "邀请奖励",
+      hint: "邀请链接与奖励记录"
     },
     {
       id: "credits",
@@ -332,6 +339,14 @@ function creditTitle(
     return "卡密充值";
   }
 
+  if (record.note?.startsWith("邀请奖励")) {
+    return "邀请奖励";
+  }
+
+  if (record.note?.startsWith("受邀新人奖励")) {
+    return "受邀新人奖励";
+  }
+
   return record.amount >= 0
     ? "站长增加积分"
     : "站长扣减积分";
@@ -419,6 +434,10 @@ function creditTitle(
           :user="user"
           @balance-updated="updateBalance"
         />
+      </section>
+
+      <section v-else-if="activeSection === 'invites'" class="account-content">
+        <InvitationRewardsPanel />
       </section>
 
       <section v-else-if="activeSection === 'usage'" class="account-content">

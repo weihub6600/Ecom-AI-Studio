@@ -25,6 +25,15 @@ interface RegistrationPolicyPayload {
     requiresApproval: boolean;
     updatedAt: string;
   };
+
+  invitation?: {
+    enabled: boolean;
+    inviterRewardPoints: number;
+    inviteeRewardPoints: number;
+    rewardTrigger: "registration" | "activation";
+    rewardTitle: string;
+    rewardDescription: string;
+  };
 }
 
 const mode =
@@ -69,6 +78,16 @@ const captchaLoading =
 
 const registrationRequiresApproval =
   ref(true);
+
+const invitationEnabled = ref(false);
+const invitationDescription = ref("");
+const inviteCode = ref(
+  new URLSearchParams(
+    window.location.search
+  ).get("invite")
+    ?.trim()
+    .toUpperCase() || ""
+);
 
 const policyLoading =
   ref(false);
@@ -130,6 +149,12 @@ async function loadRegistrationPolicy() {
     registrationRequiresApproval.value =
       data.registration
         .requiresApproval;
+
+    invitationEnabled.value =
+      Boolean(data.invitation?.enabled);
+
+    invitationDescription.value =
+      data.invitation?.rewardDescription || "";
   }
   catch {
     // 安全默认：读取失败时继续要求站长审核。
@@ -249,7 +274,11 @@ async function submit() {
           captchaId:
             captchaId.value,
           captchaAnswer:
-            normalizedCaptcha
+            normalizedCaptcha,
+          inviteCode:
+            mode.value === "register"
+              ? inviteCode.value.trim()
+              : undefined
         })
       );
 
@@ -410,6 +439,21 @@ async function submit() {
           />
         </label>
 
+        <label
+          v-if="mode === 'register' && invitationEnabled"
+          class="auth-invite-label"
+        >
+          <span>邀请码（选填）</span>
+          <input
+            v-model="inviteCode"
+            type="text"
+            autocomplete="off"
+            maxlength="24"
+            placeholder="通过邀请链接进入会自动填写"
+          />
+          <small>{{ invitationDescription || '填写好友的邀请码，满足条件后双方可获得积分。' }}</small>
+        </label>
+
         <label class="auth-captcha-label">
           <span>验证码</span>
 
@@ -495,6 +539,9 @@ async function submit() {
 </template>
 
 <style scoped>
+.auth-invite-label { display: grid; gap: 7px; }
+.auth-invite-label input { text-transform: uppercase; letter-spacing: .08em; }
+.auth-invite-label small { color: #9295a6; font-size: 10px; line-height: 1.5; }
 .auth-captcha-label {
   display: grid;
   gap: 7px;

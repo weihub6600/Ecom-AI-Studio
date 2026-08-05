@@ -14,6 +14,9 @@ import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
 import type { AuditLogService } from "../services/audit-log.js";
 import type { AdminQueryService } from "../services/admin-query.js";
+import type {
+  InvitationRewardService
+} from "../services/invitation-rewards.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { readRouteParam, sendAuthError } from "../utils/express.js";
 
@@ -24,6 +27,8 @@ export function createAdminRouter(options: {
   modelSettingsService: ModelSettingsService;
   auditLogService: AuditLogService;
   adminQueryService: AdminQueryService;
+  invitationRewardService:
+    InvitationRewardService;
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;
 }): Router {
@@ -34,6 +39,7 @@ export function createAdminRouter(options: {
     modelSettingsService,
     auditLogService,
     adminQueryService,
+    invitationRewardService,
     requireAuth,
     requireAdmin
   } = options;
@@ -255,7 +261,28 @@ export function createAdminRouter(options: {
       if (!userId) return;
       const actor = getAuthenticatedUser(request);
       const body = request.body as { username?: unknown; status?: unknown };
-      const user = await authService.updateUser(userId, { username: body?.username, status: body?.status }, actor.id);
+      let user = await authService.updateUser(
+        userId,
+        {
+          username: body?.username,
+          status: body?.status
+        },
+        actor.id
+      );
+      if (body?.status === "active") {
+        try {
+          user =
+            await invitationRewardService
+              .rewardActivatedUser(userId) ||
+            user;
+        }
+        catch (invitationError) {
+          console.error(
+            "发放邀请奖励失败",
+            invitationError
+          );
+        }
+      }
       await auditLogService.safeRecord({ actor, action: "user.update", targetType: "user", targetId: userId, summary: `更新用户 ${user.username}`, details: body, context: auditContext(request) });
       return response.json({ success: true, user });
     } catch (error) { return sendAuthError(response, error, "更新用户失败"); }

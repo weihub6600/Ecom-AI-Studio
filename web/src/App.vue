@@ -191,6 +191,15 @@ onMounted(async () => {
     handleGlobalKeydown
   );
   await Promise.all([loadCurrentUser(), loadModels()]);
+
+  const inviteCode = new URLSearchParams(
+    window.location.search
+  ).get("invite");
+
+  if (inviteCode && !authUser.value) {
+    authMode.value = "register";
+    authDialogOpen.value = true;
+  }
   syncIntroCollapsedState();
   if (authUser.value) {
     await Promise.all([loadHistory(true), loadTasks()]);

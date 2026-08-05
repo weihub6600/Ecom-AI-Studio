@@ -13,6 +13,10 @@ import {
   createRegistrationSettingsService
 } from "./services/registration-settings.js";
 import {
+  createInvitationRewardService
+} from "./services/invitation-rewards.js";
+// V13.5_INVITATION_REWARD_PATCH_V2
+import {
   createAppDatabase
 } from "./db/database.js";
 import {
@@ -111,6 +115,11 @@ export async function startServer():
 
   const registrationSettingsService =
     createRegistrationSettingsService(
+      database
+    );
+
+  const invitationRewardService =
+    createInvitationRewardService(
       database
     );
 
@@ -222,6 +231,8 @@ export async function startServer():
   await Promise.all([
     registrationSettingsService
       .initialize(),
+    invitationRewardService
+      .initialize(),
     historyService.initialize(),
     authService.initialize(),
     customProviderService.initialize(),
@@ -276,6 +287,8 @@ export async function startServer():
         builtInProviderSettingsService,
       registrationSettingsService:
         registrationSettingsService,
+      invitationRewardService:
+        invitationRewardService,
       secureAuthCookie,
       webDist
     });
