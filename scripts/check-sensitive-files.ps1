@@ -53,7 +53,7 @@ try {
                 $GitIgnore -notmatch (
                     "(?m)^" +
                     [regex]::Escape($RequiredRule) +
-                    "$"
+                    "\r?$"
                 )
             ) {
                 $Problems += ".gitignore 缺少：$RequiredRule"
