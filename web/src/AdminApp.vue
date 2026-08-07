@@ -17,8 +17,9 @@ import type {
 } from "./types";
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
 import ApiProviderManager from "./components/ApiProviderManager.vue";
+import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "users" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "users" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -63,6 +64,7 @@ const auditAction = ref("");
 
 const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "dashboard", label: "数据总览", hint: "运营与系统状态" },
+  { id: "tasks", label: "任务运维", hint: "健康、异常与恢复" },
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
@@ -449,6 +451,10 @@ function auditLabel(action: string) {
             </article>
           </div>
         </template>
+      </section>
+
+      <section v-else-if="activeSection === 'tasks'" class="admin-v10-section">
+        <AdminTaskManager />
       </section>
 
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">

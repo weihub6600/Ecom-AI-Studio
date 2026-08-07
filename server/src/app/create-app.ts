@@ -236,7 +236,9 @@ export function createApp(
     customProviderService:
       context.customProviderService,
     healthService:
-      context.healthService
+      context.healthService,
+    requireAuth,
+    requireAdmin
   }));
 
   app.use(createAuthRouter({
