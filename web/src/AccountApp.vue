@@ -8,6 +8,7 @@ import {
   ApiError,
   apiRequest
 } from "./api/client";
+import AccountProfileSecurity from "./components/AccountProfileSecurity.vue";
 import WorkLibrary from "./components/WorkLibrary.vue";
 import BatchStudio from "./components/BatchStudio.vue";
 import AccountHistory from "./components/AccountHistory.vue";
@@ -25,6 +26,7 @@ import {
 
 type AccountSection =
   | "library"
+  | "profile"
   | "history"
   | "batch"
   | "usage"
@@ -71,6 +73,11 @@ const sections:
       id: "library",
       label: "作品库",
       hint: "收藏、分类与回收站"
+    },
+    {
+      id: "profile",
+      label: "账号设置",
+      hint: "昵称与密码安全"
     },
     {
       id: "history",
@@ -266,6 +273,10 @@ async function redeemCard() {
 }
 
 
+function handleProfileUpdated(nextUser: AuthUser) {
+  user.value = nextUser;
+}
+
 async function logout() {
   try {
     await apiRequest(
@@ -378,8 +389,8 @@ function creditTitle(
       <div class="account-profile">
         <span>{{ user.username.slice(0, 1).toUpperCase() }}</span>
         <div>
-          <strong>{{ user.username }}</strong>
-          <small>{{ user.role === 'admin' ? '站长账号' : '普通用户' }}</small>
+          <strong>{{ user.nickname || user.username }}</strong>
+          <small>{{ user.nickname ? `账号 ${user.username}` : (user.role === 'admin' ? '站长账号' : '普通用户') }}</small>
         </div>
       </div>
 
@@ -423,6 +434,10 @@ function creditTitle(
 
       <section v-if="activeSection === 'library'" class="account-content">
         <WorkLibrary :user-id="user.id" />
+      </section>
+
+      <section v-else-if="activeSection === 'profile'" class="account-content">
+        <AccountProfileSecurity :user="user" @user-updated="handleProfileUpdated" />
       </section>
 
       <section v-else-if="activeSection === 'history'" class="account-content">

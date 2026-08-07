@@ -6,15 +6,18 @@ export type CreditTransactionType = "generation_charge" | "generation_refund" | 
 export interface PublicUser {
   id: string;
   username: string;
+  nickname?: string;
   role: UserRole;
   status: UserStatus;
   createdAt: string;
   approvedAt?: string;
   lastLoginAt?: string;
   credits: number;
+  mustChangePassword?: boolean;
 }
 
 export interface AdminUserSummary extends PublicUser {
+  adminNote?: string;
   loginCount: number;
   usageCount: number;
   lastLoginIp?: string;

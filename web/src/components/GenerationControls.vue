@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { AuthUser, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
 import { displayProviderText, formatBytes, formatPoints, providerDisplayName } from "../utils/format";
 
@@ -56,7 +56,14 @@ const MAX_PROMPT_PRESETS = 7;
 const PROMPT_PRESET_STORAGE_PREFIX = "ecom-ai-studio:prompt-presets:";
 const promptPresets = ref<PromptPreset[]>([]);
 
-onMounted(loadPromptPresets);
+onMounted(() => {
+  loadPromptPresets();
+  window.addEventListener("paste", onGlobalPaste);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("paste", onGlobalPaste);
+});
 
 watch(
   () => props.authUser?.id,
@@ -152,6 +159,31 @@ function onFileChange(event: Event) {
 function onDrop(event: DragEvent) {
   dragging.value = false;
   emit("filesSelected", Array.from(event.dataTransfer?.files || []));
+}
+
+function clipboardImages(event: ClipboardEvent): File[] {
+  return Array.from(event.clipboardData?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+}
+
+function onPaste(event: ClipboardEvent) {
+  const files = clipboardImages(event);
+  if (!files.length) return;
+  event.preventDefault();
+  event.stopPropagation();
+  emit("filesSelected", files);
+}
+
+function onGlobalPaste(event: ClipboardEvent) {
+  if (generationMode.value !== "image-edit" || event.defaultPrevented) return;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("input, textarea, [contenteditable='true']")) return;
+  const files = clipboardImages(event);
+  if (!files.length) return;
+  event.preventDefault();
+  emit("filesSelected", files);
 }
 
 async function useCustomPrompt() {
@@ -308,7 +340,9 @@ async function useCustomPrompt() {
         @dragenter.prevent="dragging = true"
         @dragover.prevent="dragging = true"
         @dragleave.prevent="dragging = false"
+        tabindex="0"
         @drop.prevent="onDrop"
+        @paste="onPaste"
         @click="openFileDialog"
       >
         <input
@@ -321,7 +355,7 @@ async function useCustomPrompt() {
         />
         <div class="upload-icon"><span></span></div>
         <strong>{{ props.uploads.length ? "继续添加参考图" : "拖拽或点击上传商品图" }}</strong>
-        <small>JPG、PNG、WEBP，单张不超过 10MB</small>
+        <small>JPG、PNG、WEBP，单张不超过 10MB · 支持 Ctrl+V / Cmd+V 粘贴图片</small>
       </div>
 
       <p v-if="props.uploads.length === 0" class="field-hint warning-hint">

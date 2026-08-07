@@ -11,6 +11,9 @@ export const SCHEMA_STATEMENTS = [
     username_key VARCHAR(64) NOT NULL,
     password_salt VARCHAR(128) NOT NULL,
     password_hash VARCHAR(256) NOT NULL,
+    nickname VARCHAR(40) NULL,
+    admin_note VARCHAR(500) NULL,
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0,
     role ENUM('admin','user') NOT NULL DEFAULT 'user',
     status ENUM('pending','active','disabled','rejected') NOT NULL DEFAULT 'pending',
     created_at DATETIME(3) NOT NULL,
@@ -203,6 +206,22 @@ export const SCHEMA_STATEMENTS = [
     KEY idx_app_model_settings_updated (updated_at),
     CONSTRAINT fk_app_model_settings_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_announcements (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    title VARCHAR(80) NOT NULL,
+    content VARCHAR(1200) NOT NULL,
+    kind ENUM('info','warning','success') NOT NULL DEFAULT 'info',
+    pinned TINYINT(1) NOT NULL DEFAULT 0,
+    published TINYINT(1) NOT NULL DEFAULT 0,
+    starts_at DATETIME(3) NULL,
+    ends_at DATETIME(3) NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    updated_by_user_id CHAR(36) NULL,
+    KEY idx_app_announcements_public (published, pinned, starts_at, ends_at, updated_at),
+    CONSTRAINT fk_app_announcements_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS app_admin_audit_logs (
     id CHAR(36) NOT NULL PRIMARY KEY,

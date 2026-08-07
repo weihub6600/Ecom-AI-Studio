@@ -86,6 +86,9 @@ interface UserRow extends RowDataPacket {
   username_key: string;
   password_salt: string;
   password_hash: string;
+  nickname: string | null;
+  admin_note: string | null;
+  must_change_password: number;
   role: UserRole;
   status: UserStatus;
   created_at: string;
@@ -101,6 +104,8 @@ export function createAuthService(options: AuthServiceOptions) {
   const configuredAdminKey = configuredAdminUsername?.toLocaleLowerCase("zh-CN");
 
   async function initialize(): Promise<void> {
+    await ensureUserProfileColumns();
+
     await pool.query(
       `CREATE TABLE IF NOT EXISTS
          app_auth_captchas (
@@ -162,6 +167,26 @@ export function createAuthService(options: AuthServiceOptions) {
         [new Date(), configuredAdminKey]
       );
     });
+  }
+
+  async function ensureUserProfileColumns(): Promise<void> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'app_users'
+         AND COLUMN_NAME IN ('nickname','admin_note','must_change_password')`
+    );
+    const columns = new Set(rows.map((row) => String(row.COLUMN_NAME)));
+    if (!columns.has("nickname")) {
+      await pool.query("ALTER TABLE app_users ADD COLUMN nickname VARCHAR(40) NULL AFTER password_hash");
+    }
+    if (!columns.has("admin_note")) {
+      await pool.query("ALTER TABLE app_users ADD COLUMN admin_note VARCHAR(500) NULL AFTER nickname");
+    }
+    if (!columns.has("must_change_password")) {
+      await pool.query("ALTER TABLE app_users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0 AFTER admin_note");
+    }
   }
 
   async function createCaptcha():
@@ -643,7 +668,8 @@ export function createAuthService(options: AuthServiceOptions) {
       ...toPublicUser(row as UserRow),
       loginCount: Number(row.login_count || 0),
       usageCount: Number(row.usage_count || 0),
-      lastLoginIp: nullableString(row.last_login_ip)
+      lastLoginIp: nullableString(row.last_login_ip),
+      adminNote: nullableString(row.admin_note)
     }));
   }
 
@@ -695,9 +721,9 @@ export function createAuthService(options: AuthServiceOptions) {
 
   async function updateUser(
     userId: string,
-    changes: { username?: unknown; status?: unknown },
+    changes: { username?: unknown; status?: unknown; adminNote?: unknown },
     actorUserId: string
-  ): Promise<PublicUser> {
+  ): Promise<PublicUser & { adminNote?: string }> {
     return withTransaction(pool, async (connection) => {
       await requireAdmin(connection, actorUserId);
       const user = await requireUser(connection, userId, true);
@@ -732,7 +758,83 @@ export function createAuthService(options: AuthServiceOptions) {
         if (status !== "active") await connection.execute("DELETE FROM app_sessions WHERE user_id = ?", [userId]);
       }
 
+      if (changes.adminNote !== undefined) {
+        const adminNote = normalizeUnknownText(changes.adminNote, 500);
+        await connection.execute(
+          "UPDATE app_users SET admin_note = ? WHERE id = ?",
+          [adminNote || null, userId]
+        );
+      }
+
+      const updated = await requireUser(connection, userId);
+      return {
+        ...toPublicUser(updated),
+        adminNote: nullableString(updated.admin_note)
+      };
+    });
+  }
+
+  async function updateProfile(
+    userId: string,
+    nicknameInput: unknown
+  ): Promise<PublicUser> {
+    const nickname = normalizeNickname(nicknameInput);
+    return withTransaction(pool, async (connection) => {
+      await requireUser(connection, userId, true);
+      await connection.execute(
+        "UPDATE app_users SET nickname = ? WHERE id = ?",
+        [nickname, userId]
+      );
       return toPublicUser(await requireUser(connection, userId));
+    });
+  }
+
+  async function changePassword(
+    userId: string,
+    currentPasswordInput: unknown,
+    newPasswordInput: unknown
+  ): Promise<void> {
+    const currentPassword = normalizePassword(currentPasswordInput);
+    const newPassword = normalizePassword(newPasswordInput);
+    if (currentPassword === newPassword) {
+      throw new AuthError(400, "PASSWORD_UNCHANGED", "新密码不能与当前密码相同");
+    }
+    await withTransaction(pool, async (connection) => {
+      const user = await requireUser(connection, userId, true);
+      if (!(await verifyPassword(currentPassword, user.password_salt, user.password_hash))) {
+        throw new AuthError(400, "INVALID_CURRENT_PASSWORD", "当前密码不正确");
+      }
+      const salt = randomBytes(16).toString("hex");
+      const hash = (await derivePassword(newPassword, salt)).toString("base64");
+      await connection.execute(
+        "UPDATE app_users SET password_salt = ?, password_hash = ?, must_change_password = 0 WHERE id = ?",
+        [salt, hash, userId]
+      );
+      await connection.execute("DELETE FROM app_sessions WHERE user_id = ?", [userId]);
+    });
+  }
+
+  async function resetPassword(
+    userId: string,
+    newPasswordInput: unknown,
+    actorUserId: string
+  ): Promise<PublicUser & { adminNote?: string }> {
+    const newPassword = normalizePassword(newPasswordInput);
+    return withTransaction(pool, async (connection) => {
+      await requireAdmin(connection, actorUserId);
+      const user = await requireUser(connection, userId, true);
+      if (user.id === actorUserId) {
+        throw new AuthError(400, "SELF_PASSWORD_RESET_BLOCKED", "站长请在个人账号设置中修改自己的密码");
+      }
+      const salt = randomBytes(16).toString("hex");
+      const hash = (await derivePassword(newPassword, salt)).toString("base64");
+      await connection.execute(
+        "UPDATE app_users SET password_salt = ?, password_hash = ?, must_change_password = 1 WHERE id = ?",
+        [salt, hash, userId]
+      );
+      await connection.execute("DELETE FROM app_sessions WHERE user_id = ?", [userId]);
+      const updated = await requireUser(connection, userId);
+      return { ...toPublicUser(updated), adminNote: nullableString(updated.admin_note) };
     });
   }
 
@@ -1052,6 +1154,9 @@ export function createAuthService(options: AuthServiceOptions) {
     listPendingUsageRecords,
     listCreditTransactions,
     updateUser,
+    updateProfile,
+    changePassword,
+    resetPassword,
     forceLogout,
     adjustCredits,
     generateRechargeCards,
@@ -1335,6 +1440,19 @@ function escapeCaptchaXml(
     );
 }
 
+function normalizeNickname(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw new AuthError(400, "INVALID_NICKNAME", "昵称格式不正确");
+  }
+  const nickname = value.trim();
+  if (!nickname) return null;
+  if (nickname.length > 40 || /[\u0000-\u001F\u007F]/u.test(nickname)) {
+    throw new AuthError(400, "INVALID_NICKNAME", "昵称不能超过 40 个字符，且不能包含控制字符");
+  }
+  return nickname;
+}
+
 async function settleGenerationInTransaction(
   connection: PoolConnection,
   user: UserRow,
@@ -1514,12 +1632,14 @@ function toPublicUser(user: UserRow): PublicUser {
   return {
     id: user.id,
     username: user.username,
+    nickname: nullableString(user.nickname),
     role: user.role,
     status: user.status,
     createdAt: mysqlDateToIso(user.created_at) || new Date().toISOString(),
     approvedAt: mysqlDateToIso(user.approved_at),
     lastLoginAt: mysqlDateToIso(user.last_login_at),
-    credits: centsToPoints(Number(user.credit_cents))
+    credits: centsToPoints(Number(user.credit_cents)),
+    mustChangePassword: Boolean(user.must_change_password) || undefined
   };
 }
 

@@ -62,6 +62,7 @@ interface Task {
   historyId?: string;
   reservedPoints: number;
   actualPoints: number;
+  refundedPoints: number;
   createdAt: string;
   durationMs: number;
   stale: boolean;
@@ -284,10 +285,10 @@ async function recover() {
       }
     );
 
+    await refreshAll();
+
     message.value =
       "恢复扫描已完成";
-
-    await refreshAll();
   }
   catch (error) {
     handleError(
@@ -327,10 +328,10 @@ async function failRefund(
         })
       );
 
+    await refreshAll();
+
     message.value =
       `任务已终止，退款 ${formatPoints(data.refundedPoints)} 积分`;
-
-    await refreshAll();
   }
   catch (error) {
     handleError(
@@ -348,6 +349,7 @@ function canRefund(
 ) {
   return (
     !task.historyId &&
+    task.reservedPoints > task.refundedPoints &&
     (
       task.stale ||
       task.status === "failed"
@@ -384,6 +386,41 @@ function statusTone(
     muted:
       taskStatus === "cancelled"
   };
+}
+
+function stageLabel(task: Task) {
+  if (task.status === "failed") {
+    if (task.refundedPoints > 0) return "失败 · 已自动退款";
+    if (task.reservedPoints <= 0) return "失败 · 无需退款";
+    return "失败 · 请核对退款";
+  }
+  const labels: Record<string, string> = {
+    queued: "等待处理",
+    submitting: "正在提交模型",
+    processing: "模型处理中",
+    settling: "正在结算积分",
+    completed: "已完成",
+    refunded: "已退款",
+    failed: "失败"
+  };
+  return labels[task.stage] || task.stage;
+}
+
+function errorCodeLabel(code?: string) {
+  if (!code) return "";
+  const labels: Record<string, string> = {
+    PROVIDER_ERROR: "服务商接口错误",
+    PROVIDER_TASK_FAILED: "服务商任务失败",
+    ADMIN_FAILED_REFUND: "站长手动终止退款",
+    TASK_RECOVERY_TIMEOUT: "任务恢复超时",
+    ASYNC_RECOVERY_EXPIRED: "异步任务恢复超时",
+    UNSUPPORTED_PROVIDER: "不支持的服务商",
+    INTERNAL_ERROR: "系统内部错误",
+    TASK_QUERY_ERROR: "任务状态查询失败",
+    PROXY_ERROR: "服务商网络错误",
+    REQUEST_TIMEOUT: "请求超时"
+  };
+  return labels[code] || "异常：" + code.split("_").join(" ");
 }
 
 function progressWidth(
@@ -840,7 +877,7 @@ function handleError(
                   v-else
                   class="cell-sub"
                 >
-                  {{ task.stage }}
+                  {{ stageLabel(task) }}
                 </div>
               </td>
 
@@ -893,7 +930,7 @@ function handleError(
                   v-if="task.errorCode"
                   class="error-code"
                 >
-                  {{ task.errorCode }}
+                  {{ errorCodeLabel(task.errorCode) }}
                 </div>
               </td>
 

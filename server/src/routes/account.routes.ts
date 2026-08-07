@@ -20,6 +20,9 @@ import {
   type GenerationTaskStatusFilter
 } from "../services/generation-tasks.js";
 import {
+  listActiveAnnouncements
+} from "../services/announcements.js";
+import {
   getAuthenticatedUser
 } from "../middleware/auth.js";
 import {
@@ -49,6 +52,19 @@ export function createAccountRouter(
   const router = Router();
 
   router.get(
+    "/api/announcements/active",
+    async (_request, response) => {
+      try {
+        return response.json({
+          announcements: await listActiveAnnouncements(database)
+        });
+      } catch (error) {
+        return sendAuthError(response, error, "读取公告失败");
+      }
+    }
+  );
+
+  router.get(
     "/api/account/summary",
     requireAuth,
     (request, response) => {
@@ -61,6 +77,38 @@ export function createAccountRouter(
           modelSettingsService
             .getPriceList()
       });
+    }
+  );
+
+  router.patch(
+    "/api/account/profile",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user = getAuthenticatedUser(request);
+        const body = request.body as { nickname?: unknown };
+        return response.json({
+          success: true,
+          user: await authService.updateProfile(user.id, body?.nickname)
+        });
+      } catch (error) {
+        return sendAuthError(response, error, "保存个人资料失败");
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/password",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user = getAuthenticatedUser(request);
+        const body = request.body as { currentPassword?: unknown; newPassword?: unknown };
+        await authService.changePassword(user.id, body?.currentPassword, body?.newPassword);
+        return response.json({ success: true });
+      } catch (error) {
+        return sendAuthError(response, error, "修改密码失败");
+      }
     }
   );
 

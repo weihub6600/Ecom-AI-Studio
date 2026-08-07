@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import UserPanel from "./UserPanel.vue";
+import AnnouncementBar from "./components/AnnouncementBar.vue";
 import AppHeader from "./components/AppHeader.vue";
 import IntroSection from "./components/IntroSection.vue";
 import AuthDialog from "./components/AuthDialog.vue";
@@ -1456,6 +1457,8 @@ async function downloadAllZip() {
       @open-admin="openAdminPage"
       @logout="logout"
     />
+
+    <AnnouncementBar />
 
     <main class="workspace">
       <IntroSection

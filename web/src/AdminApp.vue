@@ -17,9 +17,11 @@ import type {
 } from "./types";
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
 import ApiProviderManager from "./components/ApiProviderManager.vue";
+import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue";
+import AdminUserAccountTools from "./components/AdminUserAccountTools.vue";
 import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "tasks" | "users" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "announcements" | "users" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -65,6 +67,7 @@ const auditAction = ref("");
 const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "dashboard", label: "数据总览", hint: "运营与系统状态" },
   { id: "tasks", label: "任务运维", hint: "健康、异常与恢复" },
+  { id: "announcements", label: "公告管理", hint: "首页通知与发布" },
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
@@ -187,6 +190,14 @@ async function updateUser(payload: { username?: string; status?: AdminUserSummar
     usernameDraft.value = data.user.username;
     successMessage.value = "用户资料已更新";
   }, "更新用户失败");
+}
+
+function handleAdminUserToolsUpdated(user: AdminUserSummary) {
+  selectedUser.value = selectedUser.value
+    ? { ...selectedUser.value, ...user }
+    : user;
+  const index = users.value.findIndex((item) => item.id === user.id);
+  if (index >= 0) users.value[index] = { ...users.value[index]!, ...user };
 }
 
 async function adjustCredits(direction: 1 | -1) {
@@ -457,11 +468,15 @@ function auditLabel(action: string) {
         <AdminTaskManager />
       </section>
 
+      <section v-else-if="activeSection === 'announcements'" class="admin-v10-section">
+        <AdminAnnouncementManager />
+      </section>
+
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">
         <RegistrationSettingsPanel />
         <InvitationSettingsPanel />
         <div class="admin-v10-toolbar">
-          <input v-model="userSearch" type="search" placeholder="搜索用户名" @keyup.enter="loadUsers(1)" />
+          <input v-model="userSearch" type="search" placeholder="搜索用户名或昵称" @keyup.enter="loadUsers(1)" />
           <select v-model="userStatus"><option value="">全部状态</option><option value="pending">待审核</option><option value="active">已启用</option><option value="disabled">已封禁</option><option value="rejected">已拒绝</option></select>
           <button @click="loadUsers(1)">查询</button><span>共 {{ usersPagination.total }} 位用户</span>
         </div>
@@ -469,7 +484,7 @@ function auditLabel(action: string) {
           <div class="admin-v10-card admin-v10-table-card">
             <table><thead><tr><th>用户</th><th>状态</th><th>积分</th><th>调用</th><th>最近登录</th></tr></thead>
               <tbody><tr v-for="user in users" :key="user.id" :class="{ selected: selectedUser?.id === user.id }" @click="selectUser(user)">
-                <td><div class="admin-v10-user-cell"><span>{{ user.username.slice(0,1).toUpperCase() }}</span><div><strong>{{ user.username }}</strong><small>{{ user.role === 'admin' ? '站长' : formatDate(user.createdAt) }}</small></div></div></td>
+                <td><div class="admin-v10-user-cell"><span>{{ user.username.slice(0,1).toUpperCase() }}</span><div><strong>{{ user.nickname || user.username }}</strong><small>{{ user.nickname ? `账号 ${user.username}` : (user.role === 'admin' ? '站长' : formatDate(user.createdAt)) }}</small></div></div></td>
                 <td><i class="status-chip" :class="user.status">{{ statusLabel(user.status) }}</i></td><td>{{ user.role === 'admin' ? '不限' : formatPoints(user.credits) }}</td><td>{{ user.usageCount }}</td><td>{{ formatDate(user.lastLoginAt) }}</td>
               </tr></tbody></table>
             <div v-if="!users.length" class="admin-v10-empty">没有匹配用户</div>
@@ -481,6 +496,7 @@ function auditLabel(action: string) {
             <template v-else>
               <div class="admin-v10-profile"><span>{{ selectedUser.username.slice(0,1).toUpperCase() }}</span><div><h2>{{ selectedUser.username }}</h2><p>注册 {{ formatDate(selectedUser.createdAt) }}</p></div><i class="status-chip" :class="selectedUser.status">{{ statusLabel(selectedUser.status) }}</i></div>
               <div class="admin-v10-balance"><span>当前积分</span><strong>{{ selectedUser.role === 'admin' ? '不限' : formatPoints(selectedUser.credits) }}</strong><small>登录 {{ selectedUser.loginCount }} 次 · 生图 {{ selectedUser.usageCount }} 次</small></div>
+              <AdminUserAccountTools :user="selectedUser" @user-updated="handleAdminUserToolsUpdated" />
               <div class="admin-v10-form-block"><label>修改用户名</label><div><input v-model="usernameDraft" maxlength="32" /><button @click="saveUsername">保存</button></div></div>
               <div v-if="selectedUser.role !== 'admin'" class="admin-v10-form-block"><label>积分调整</label><div><input v-model="creditAmount" type="number" min="0.01" step="0.01" /><input v-model="creditNote" placeholder="备注" /></div><div class="action-row"><button class="positive" @click="adjustCredits(1)">增加积分</button><button class="danger" @click="adjustCredits(-1)">扣减积分</button></div></div>
               <div v-if="selectedUser.role !== 'admin'" class="action-row status-actions"><button v-if="selectedUser.status !== 'active'" class="positive" @click="setUserStatus('active')">启用账号</button><button v-if="selectedUser.status === 'pending'" @click="setUserStatus('rejected')">拒绝申请</button><button v-if="selectedUser.status === 'active'" class="danger" @click="setUserStatus('disabled')">封禁账号</button><button v-if="selectedUser.status === 'rejected'" @click="setUserStatus('pending')">退回待审核</button><button v-if="!selectedUserIsSelf" @click="forceLogout">强制退出</button></div>

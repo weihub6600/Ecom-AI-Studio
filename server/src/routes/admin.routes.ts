@@ -9,6 +9,12 @@ import {
 import {
   runTaskRecoveryOnce
 } from "../services/async-reconciliation.js";
+import {
+  createAnnouncement,
+  deleteAnnouncement,
+  listAdminAnnouncements,
+  updateAnnouncement
+} from "../services/announcements.js";
 import { Router, type Request, type RequestHandler } from "express";
 import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
@@ -51,6 +57,51 @@ export function createAdminRouter(options: {
     catch (error) { return sendAuthError(response, error, "读取站长看板失败"); }
   });
 
+
+  router.get("/api/admin/announcements", ...protectedAdmin, async (_request, response) => {
+    try {
+      return response.json({ announcements: await listAdminAnnouncements(database) });
+    } catch (error) {
+      return sendAuthError(response, error, "读取公告列表失败");
+    }
+  });
+
+  router.post("/api/admin/announcements", ...protectedAdmin, async (request, response) => {
+    try {
+      const actor = getAuthenticatedUser(request);
+      const announcement = await createAnnouncement(database, request.body || {}, actor.id);
+      await auditLogService.safeRecord({ actor, action: "announcement.create", targetType: "announcement", targetId: announcement.id, summary: "发布公告：" + announcement.title, context: auditContext(request) });
+      return response.status(201).json({ success: true, announcement });
+    } catch (error) {
+      return sendAuthError(response, error, "发布公告失败");
+    }
+  });
+
+  router.patch("/api/admin/announcements/:id", ...protectedAdmin, async (request, response) => {
+    try {
+      const id = requiredId(request.params.id, response, "INVALID_ANNOUNCEMENT_ID", "缺少公告 ID");
+      if (!id) return;
+      const actor = getAuthenticatedUser(request);
+      const announcement = await updateAnnouncement(database, id, request.body || {}, actor.id);
+      await auditLogService.safeRecord({ actor, action: "announcement.update", targetType: "announcement", targetId: id, summary: "更新公告：" + announcement.title, context: auditContext(request) });
+      return response.json({ success: true, announcement });
+    } catch (error) {
+      return sendAuthError(response, error, "更新公告失败");
+    }
+  });
+
+  router.delete("/api/admin/announcements/:id", ...protectedAdmin, async (request, response) => {
+    try {
+      const id = requiredId(request.params.id, response, "INVALID_ANNOUNCEMENT_ID", "缺少公告 ID");
+      if (!id) return;
+      const actor = getAuthenticatedUser(request);
+      await deleteAnnouncement(database, id);
+      await auditLogService.safeRecord({ actor, action: "announcement.delete", targetType: "announcement", targetId: id, summary: "删除公告", context: auditContext(request) });
+      return response.json({ success: true });
+    } catch (error) {
+      return sendAuthError(response, error, "删除公告失败");
+    }
+  });
 
   router.get(
     "/api/admin/tasks",
@@ -260,12 +311,13 @@ export function createAdminRouter(options: {
       const userId = requiredId(request.params.id, response, "INVALID_USER_ID", "缺少用户 ID");
       if (!userId) return;
       const actor = getAuthenticatedUser(request);
-      const body = request.body as { username?: unknown; status?: unknown };
+      const body = request.body as { username?: unknown; status?: unknown; adminNote?: unknown };
       let user = await authService.updateUser(
         userId,
         {
           username: body?.username,
-          status: body?.status
+          status: body?.status,
+          adminNote: body?.adminNote
         },
         actor.id
       );
@@ -286,6 +338,20 @@ export function createAdminRouter(options: {
       await auditLogService.safeRecord({ actor, action: "user.update", targetType: "user", targetId: userId, summary: `更新用户 ${user.username}`, details: body, context: auditContext(request) });
       return response.json({ success: true, user });
     } catch (error) { return sendAuthError(response, error, "更新用户失败"); }
+  });
+
+  router.post("/api/admin/users/:id/reset-password", ...protectedAdmin, async (request, response) => {
+    try {
+      const userId = requiredId(request.params.id, response, "INVALID_USER_ID", "缺少用户 ID");
+      if (!userId) return;
+      const actor = getAuthenticatedUser(request);
+      const body = request.body as { newPassword?: unknown };
+      const user = await authService.resetPassword(userId, body?.newPassword, actor.id);
+      await auditLogService.safeRecord({ actor, action: "user.reset_password", targetType: "user", targetId: userId, summary: "重置用户 " + user.username + " 密码", details: { mustChangePassword: true }, context: auditContext(request) });
+      return response.json({ success: true, user });
+    } catch (error) {
+      return sendAuthError(response, error, "重置用户密码失败");
+    }
   });
 
   router.post("/api/admin/users/:id/logout", ...protectedAdmin, async (request, response) => {
