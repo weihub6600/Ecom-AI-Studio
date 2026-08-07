@@ -100,7 +100,15 @@ export async function startServer():
       .AUTH_COOKIE_SECURE ===
     "true";
 
+  const historyRetentionEnabled =
+
+    process.env.HISTORY_RETENTION_ENABLED ===
+
+    "true";
+
+
   const database =
+
     await createAppDatabase();
 
   const migrationResult =
@@ -239,8 +247,16 @@ export async function startServer():
     modelSettingsService.initialize(),
     batchJobService.initialize()
   ]);
-
-  await historyRetentionService.start();
+  if (historyRetentionEnabled) {
+    await historyRetentionService.start();
+    console.log(
+      "生成历史自动清理：已开启"
+    );
+  } else {
+    console.log(
+      "生成历史自动清理：已关闭"
+    );
+  }
 
   const health =
     await healthService.check();
@@ -338,7 +354,11 @@ export async function startServer():
 
     stopReconciliation();
     stopBatchWorker();
-    historyRetentionService.stop();
+    if (historyRetentionEnabled) {
+
+      historyRetentionService.stop();
+
+    }
 
     await new Promise<void>(
       (resolve) => {

@@ -406,6 +406,24 @@ export function createInvitationRewardService(
             if (!isDuplicateEntry(error)) {
               throw error;
             }
+
+            const [racedRows] =
+              await connection.query<
+                RowDataPacket[]
+              >(
+                `SELECT code
+                 FROM app_invitation_codes
+                 WHERE user_id = ?
+                 LIMIT 1
+                 FOR UPDATE`,
+                [userId]
+              );
+
+            if (racedRows[0]?.code) {
+              return String(
+                racedRows[0].code
+              );
+            }
           }
         }
 

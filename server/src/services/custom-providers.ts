@@ -1791,18 +1791,26 @@ function encryptionKey():
   Buffer {
   const secret =
     process.env
-      .API_PROVIDER_SECRET ||
-    process.env
-      .CSRF_SECRET;
+      .API_PROVIDER_SECRET;
+
+  const normalizedSecret =
+    secret?.trim();
+
+  const insecureSecret =
+    normalizedSecret
+      ? /^(?:replace-with-at-least-32-random-characters|change-me|your-secret|default)$/i
+          .test(normalizedSecret)
+      : true;
 
   if (
     !secret ||
-    secret.length < 32
+    secret.length < 32 ||
+    insecureSecret
   ) {
     throw new AuthError(
       503,
       "API_PROVIDER_SECRET_MISSING",
-      "服务端尚未配置 API_PROVIDER_SECRET"
+      "服务端必须单独配置长度至少 32 位的随机 API_PROVIDER_SECRET"
     );
   }
 

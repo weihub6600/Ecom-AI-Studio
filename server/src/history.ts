@@ -821,6 +821,41 @@ async function ensureGenerationTaskHistorySchema(
   pool: Pool,
   databaseName: string
 ): Promise<void> {
+  const [providerColumnRows] =
+    await pool.query<RowDataPacket[]>(
+      `SELECT
+         DATA_TYPE,
+         CHARACTER_MAXIMUM_LENGTH
+       FROM information_schema.COLUMNS
+       WHERE
+         TABLE_SCHEMA = ?
+         AND TABLE_NAME = 'app_history_records'
+         AND COLUMN_NAME = 'provider'
+       LIMIT 1`,
+      [databaseName]
+    );
+
+  const providerColumn =
+    providerColumnRows[0];
+
+  if (
+    providerColumn &&
+    (
+      String(
+        providerColumn.DATA_TYPE || ""
+      ).toLowerCase() !== "varchar" ||
+      Number(
+        providerColumn.CHARACTER_MAXIMUM_LENGTH || 0
+      ) < 80
+    )
+  ) {
+    await pool.query(
+      `ALTER TABLE app_history_records
+       MODIFY COLUMN provider
+         VARCHAR(80) NOT NULL`
+    );
+  }
+
   const [columnRows] =
     await pool.query<RowDataPacket[]>(
       `SELECT COLUMN_NAME

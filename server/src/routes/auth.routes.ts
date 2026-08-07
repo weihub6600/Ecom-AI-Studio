@@ -344,11 +344,22 @@ export function createAuthRouter(options: {
               .requiresApproval
           );
 
-        const registeredUser =
-          await registrationSettingsService
-            .grantRegistrationBonus(
-              result.user
-            );
+        let registeredUser =
+          result.user;
+
+        try {
+          registeredUser =
+            await registrationSettingsService
+              .grantRegistrationBonus(
+                result.user
+              );
+        }
+        catch (registrationBonusError) {
+          console.error(
+            "发放注册赠送积分失败",
+            registrationBonusError
+          );
+        }
 
         let invitedUser = registeredUser;
         try {
