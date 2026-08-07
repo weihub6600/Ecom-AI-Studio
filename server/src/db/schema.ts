@@ -221,7 +221,7 @@ export const SCHEMA_STATEMENTS = [
     updated_by_user_id CHAR(36) NULL,
     KEY idx_app_announcements_public (published, pinned, starts_at, ends_at, updated_at),
     CONSTRAINT fk_app_announcements_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 
   `CREATE TABLE IF NOT EXISTS app_admin_audit_logs (
     id CHAR(36) NOT NULL PRIMARY KEY,
