@@ -43,16 +43,19 @@ function getConfig() {
     );
 
   const apiKey =
-    runtime?.apiKey ||
-    process.env
-      .NANO_BANANA_API_KEY ||
-    process.env
-      .GRSAI_API_KEY ||
-    "";
+    runtime
+      ? runtime.apiKey
+      : (
+          process.env
+            .NANO_BANANA_API_KEY ||
+          process.env
+            .GRSAI_API_KEY ||
+          ""
+        );
 
   if (!apiKey) {
     throw new Error(
-      "Nano Banana 尚未配置 API Key"
+      "Nano Banana 尚未配置 API Key，或保存密钥与当前 API_PROVIDER_SECRET 不匹配"
     );
   }
 

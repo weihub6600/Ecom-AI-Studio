@@ -190,6 +190,17 @@ onMounted(async () => {
     "keydown",
     handleGlobalKeydown
   );
+
+  window.addEventListener(
+    "focus",
+    refreshModelsWhenVisible
+  );
+
+  document.addEventListener(
+    "visibilitychange",
+    refreshModelsWhenVisible
+  );
+
   await Promise.all([loadCurrentUser(), loadModels()]);
 
   const inviteCode = new URLSearchParams(
@@ -213,6 +224,16 @@ onUnmounted(() => {
   window.removeEventListener(
     "keydown",
     handleGlobalKeydown
+  );
+
+  window.removeEventListener(
+    "focus",
+    refreshModelsWhenVisible
+  );
+
+  document.removeEventListener(
+    "visibilitychange",
+    refreshModelsWhenVisible
   );
 });
 
@@ -426,19 +447,66 @@ async function finishGenerationProgress() {
   await sleep(500);
 }
 
-async function loadModels() {
+function refreshModelsWhenVisible() {
+  if (document.hidden) return;
+
+  void loadModels(true);
+}
+
+async function loadModels(
+  preserveSelection = false
+) {
   modelLoading.value = true;
   errorMessage.value = "";
+
+  const previousProvider =
+    selectedProviderId.value;
+
+  const previousModel =
+    selectedModelId.value;
+
   try {
-    const data = await apiRequest<{ models: ModelCapability[] }>("/api/models");
-    models.value = data.models || [];
-    const firstModel = models.value.find((model) => model.provider === "grsai") || models.value[0];
-    if (firstModel) {
-      selectedProviderId.value = firstModel.provider;
-      selectedModelId.value = firstModel.id;
+    const data =
+      await apiRequest<{
+        models:
+          ModelCapability[];
+      }>("/api/models");
+
+    models.value =
+      data.models || [];
+
+    const previous =
+      preserveSelection
+        ? models.value.find(
+            (model) =>
+              model.provider ===
+                previousProvider &&
+              model.id ===
+                previousModel
+          )
+        : undefined;
+
+    const target =
+      previous ||
+      models.value.find(
+        (model) =>
+          model.provider ===
+          "grsai"
+      ) ||
+      models.value[0];
+
+    if (target) {
+      selectedProviderId.value =
+        target.provider;
+
+      selectedModelId.value =
+        target.id;
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "服务端未启动";
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : "服务端未启动";
   } finally {
     modelLoading.value = false;
   }

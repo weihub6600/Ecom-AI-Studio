@@ -341,7 +341,11 @@ export function createAuthRouter(options: {
             body?.username,
             body?.password,
             registrationPolicy
-              .requiresApproval
+              .requiresApproval,
+            {
+              clientIp,
+              userAgent
+            }
           );
 
         let registeredUser =
@@ -541,6 +545,21 @@ export function createAuthRouter(options: {
       } catch (error) {
         if (
           error instanceof AuthError &&
+          shouldRecordRouteLoginFailure(
+            error.code
+          )
+        ) {
+          await safeRecordLoginAttempt(
+            authService,
+            body?.username,
+            error.message,
+            clientIp,
+            userAgent
+          );
+        }
+
+        if (
+          error instanceof AuthError &&
           error.code === "INVALID_CREDENTIALS"
         ) {
           const [ipFailure, accountFailure] =
@@ -691,6 +710,45 @@ function applyRateHeaders(
     response.setHeader(
       "Retry-After",
       String(state.retryAfterSeconds)
+    );
+  }
+}
+
+function shouldRecordRouteLoginFailure(
+  code: string
+): boolean {
+  return (
+    code === "LOGIN_RATE_LIMITED" ||
+    code === "INVALID_USERNAME" ||
+    code === "INVALID_PASSWORD" ||
+    code.startsWith("CAPTCHA_") ||
+    code === "INVALID_CAPTCHA"
+  );
+}
+
+async function safeRecordLoginAttempt(
+  authService: AuthService,
+  username: unknown,
+  reason: string,
+  clientIp: string,
+  userAgent: string | undefined
+): Promise<void> {
+  try {
+    await authService
+      .recordLoginAttempt(
+        username,
+        false,
+        reason,
+        {
+          clientIp,
+          userAgent
+        }
+      );
+  }
+  catch (auditError) {
+    console.error(
+      "记录登录审计失败",
+      auditError
     );
   }
 }

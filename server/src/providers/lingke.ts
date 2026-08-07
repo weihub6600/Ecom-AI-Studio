@@ -48,14 +48,17 @@ function getConfig() {
     );
 
   const apiKey =
-    runtime?.apiKey ||
-    process.env
-      .LINGKE_API_KEY ||
-    "";
+    runtime
+      ? runtime.apiKey
+      : (
+          process.env
+            .LINGKE_API_KEY ||
+          ""
+        );
 
   if (!apiKey) {
     throw new Error(
-      "ZHE AI 尚未配置 API Key"
+      "ZHE AI 尚未配置 API Key，或保存密钥与当前 API_PROVIDER_SECRET 不匹配"
     );
   }
 

@@ -64,6 +64,9 @@ export function createCustomProviderRouter(
           providers:
             await builtInProviderSettingsService
               .listAdmin(),
+          security:
+            builtInProviderSettingsService
+              .getSecurityStatus(),
           models:
             modelSettingsService
               .listAll()
@@ -134,6 +137,9 @@ export function createCustomProviderRouter(
 
         return response.json({
           provider,
+          security:
+            builtInProviderSettingsService
+              .getSecurityStatus(),
           models:
             modelSettingsService
               .listAll()

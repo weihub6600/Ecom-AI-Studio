@@ -118,7 +118,7 @@ export function createAdminQueryService(database: AppDatabase) {
   async function listUserLogins(userId: string, input: PageInput): Promise<PageResult<Record<string, unknown>>> {
     return listSimple(
       `SELECT COUNT(*) total FROM app_login_records WHERE user_id = ?`,
-      `SELECT * FROM app_login_records WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT * FROM app_login_records WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
       [userId], input, mapLogin
     );
   }

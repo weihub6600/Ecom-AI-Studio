@@ -377,7 +377,8 @@ export function createAuthService(options: AuthServiceOptions) {
   async function register(
     usernameInput: unknown,
     passwordInput: unknown,
-    requiresApproval = true
+    requiresApproval = true,
+    context: AuthAuditContext = {}
   ): Promise<{ user: PublicUser; pending: boolean; token?: string }> {
     const username = normalizeUsername(usernameInput);
     const password = normalizePassword(passwordInput);
@@ -451,7 +452,17 @@ export function createAuthService(options: AuthServiceOptions) {
           isFirstConfiguredAdmin
             ? "站长账号首次注册"
             : "注册后自动启用",
-        createdAt
+        createdAt,
+        clientIp:
+          normalizeAuditText(
+            context.clientIp,
+            120
+          ),
+        userAgent:
+          normalizeAuditText(
+            context.userAgent,
+            600
+          )
       });
       return { user: toPublicUser(user), pending: false, token };
     });
@@ -517,6 +528,86 @@ export function createAuthService(options: AuthServiceOptions) {
       const updated = await requireUser(connection, user.id);
       return { user: toPublicUser(updated), token };
     });
+  }
+
+  async function recordLoginAttempt(
+    usernameInput: unknown,
+    success: boolean,
+    reason: string,
+    context: AuthAuditContext = {}
+  ): Promise<void> {
+    const rawUsername =
+      typeof usernameInput ===
+        "string"
+        ? usernameInput.trim()
+        : "";
+
+    const storedUsername =
+      rawUsername
+        ? rawUsername.slice(0, 32)
+        : "未提供用户名";
+
+    let userId:
+      string |
+      undefined;
+
+    let canonicalUsername =
+      storedUsername;
+
+    if (
+      /^[A-Za-z0-9_\u4e00-\u9fff]{2,32}$/u
+        .test(rawUsername)
+    ) {
+      const [rows] =
+        await pool.query<
+          RowDataPacket[]
+        >(
+          `SELECT id, username
+           FROM app_users
+           WHERE username_key = ?
+           LIMIT 1`,
+          [
+            rawUsername
+              .toLocaleLowerCase(
+                "zh-CN"
+              )
+          ]
+        );
+
+      if (rows[0]) {
+        userId =
+          String(rows[0].id);
+
+        canonicalUsername =
+          String(
+            rows[0].username
+          );
+      }
+    }
+
+    await insertLoginRecord(
+      pool,
+      {
+        userId,
+        username:
+          canonicalUsername,
+        success,
+        reason:
+          reason.slice(0, 300),
+        createdAt:
+          new Date(),
+        clientIp:
+          normalizeAuditText(
+            context.clientIp,
+            120
+          ),
+        userAgent:
+          normalizeAuditText(
+            context.userAgent,
+            600
+          )
+      }
+    );
   }
 
   async function getUserByToken(token: string | undefined): Promise<PublicUser | undefined> {
@@ -951,6 +1042,7 @@ export function createAuthService(options: AuthServiceOptions) {
     verifyCaptcha,
     register,
     login,
+    recordLoginAttempt,
     logout,
     getUserByToken,
     listUsers,

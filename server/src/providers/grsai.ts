@@ -43,14 +43,17 @@ function getConfig() {
     );
 
   const apiKey =
-    runtime?.apiKey ||
-    process.env
-      .GRSAI_API_KEY ||
-    "";
+    runtime
+      ? runtime.apiKey
+      : (
+          process.env
+            .GRSAI_API_KEY ||
+          ""
+        );
 
   if (!apiKey) {
     throw new Error(
-      "GRSAI 尚未配置 API Key"
+      "GRSAI 尚未配置 API Key，或保存密钥与当前 API_PROVIDER_SECRET 不匹配"
     );
   }
 

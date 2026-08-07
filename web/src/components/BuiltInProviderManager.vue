@@ -52,6 +52,12 @@ interface BuiltInModel {
   updatedAt?: string;
 }
 
+interface ProviderSecretStatus {
+  configured: boolean;
+  source: "API_PROVIDER_SECRET";
+  message: string;
+}
+
 interface ProviderDraft {
   displayName: string;
   baseUrl: string;
@@ -93,6 +99,14 @@ const providers =
 
 const models =
   ref<BuiltInModel[]>([]);
+
+const providerSecretStatus =
+  ref<ProviderSecretStatus>({
+    configured: false,
+    source: "API_PROVIDER_SECRET",
+    message:
+      "正在检查 API Key 加密配置"
+  });
 
 const providerDrafts =
   reactive<
@@ -162,6 +176,8 @@ async function loadData() {
           BuiltInProvider[];
         models:
           BuiltInModel[];
+        security:
+          ProviderSecretStatus;
       }>(
         "/api/admin/builtin-api-providers"
       );
@@ -171,6 +187,15 @@ async function loadData() {
 
     models.value =
       data.models || [];
+
+    providerSecretStatus.value =
+      data.security || {
+        configured: false,
+        source:
+          "API_PROVIDER_SECRET",
+        message:
+          "无法确认 API Key 加密配置"
+      };
 
     syncDrafts();
   }
@@ -314,40 +339,52 @@ async function saveProvider(
   clearMessages();
 
   try {
-    await apiRequest(
-      `/api/admin/builtin-api-providers/${encodeURIComponent(provider.id)}`,
-      jsonRequest({
-        displayName:
-          draft.displayName,
-        baseUrl:
-          draft.baseUrl,
-        generateEndpoint:
-          draft.generateEndpoint,
-        statusEndpoint:
-          draft.statusEndpoint,
-        timeoutMs:
-          Number(
-            draft.timeoutMs
-          ),
-        enabled:
-          draft.enabled,
-        apiKey:
-          draft.apiKey.trim() ||
-          undefined,
-        clearApiKey:
-          draft.clearApiKey,
-        imageSize:
-          provider.id ===
-            "nanobanana"
-            ? draft.imageSize
-            : undefined
-      }, "PATCH")
-    );
-
-    successMessage.value =
-      `${provider.displayName} 配置已保存`;
+    const result =
+      await apiRequest<{
+        provider:
+          BuiltInProvider;
+        security:
+          ProviderSecretStatus;
+      }>(
+        `/api/admin/builtin-api-providers/${encodeURIComponent(provider.id)}`,
+        jsonRequest({
+          displayName:
+            draft.displayName,
+          baseUrl:
+            draft.baseUrl,
+          generateEndpoint:
+            draft.generateEndpoint,
+          statusEndpoint:
+            draft.statusEndpoint,
+          timeoutMs:
+            Number(
+              draft.timeoutMs
+            ),
+          enabled:
+            draft.enabled,
+          apiKey:
+            draft.apiKey.trim() ||
+            undefined,
+          clearApiKey:
+            draft.clearApiKey,
+          imageSize:
+            provider.id ===
+              "nanobanana"
+              ? draft.imageSize
+              : undefined
+        }, "PATCH")
+      );
 
     await loadData();
+
+    providerSecretStatus.value =
+      result.security;
+
+    successMessage.value =
+      result.provider
+        .apiKeyConfigured
+        ? `${result.provider.displayName} 配置已保存，API Key ${result.provider.apiKeyPreview} 已立即载入`
+        : `${result.provider.displayName} 配置已保存；当前未配置 API Key`;
   }
   catch (error) {
     errorMessage.value =
@@ -491,6 +528,13 @@ function messageOf(
         <strong>云端配置优先</strong>
       </article>
     </div>
+
+    <p
+      v-if="!providerSecretStatus.configured"
+      class="provider-message error"
+    >
+      {{ providerSecretStatus.message }}
+    </p>
 
     <p
       v-if="successMessage"

@@ -72,6 +72,12 @@ interface ProviderDefault {
   options: Record<string, string>;
 }
 
+export interface ProviderSecretStatus {
+  configured: boolean;
+  source: "API_PROVIDER_SECRET";
+  message: string;
+}
+
 export function createBuiltInProviderSettingsService(
   database: AppDatabase
 ) {
@@ -201,6 +207,20 @@ export function createBuiltInProviderSettingsService(
     if (!initialized) {
       await initialize();
     }
+  }
+
+  function getSecurityStatus():
+    ProviderSecretStatus {
+    const configured =
+      isProviderSecretConfigured();
+
+    return {
+      configured,
+      source: "API_PROVIDER_SECRET",
+      message: configured
+        ? "API Key 加密密钥已配置"
+        : "请在 .env 配置至少 32 位随机 API_PROVIDER_SECRET"
+    };
   }
 
   async function reload():
@@ -453,8 +473,22 @@ export function createBuiltInProviderSettingsService(
       apiKeyCiphertext = "";
     }
     else if (newApiKey) {
-      apiKeyCiphertext =
+      const encrypted =
         encryptSecret(newApiKey);
+
+      if (
+        decryptSecretSafe(encrypted) !==
+        newApiKey
+      ) {
+        throw new AuthError(
+          500,
+          "API_KEY_VERIFY_FAILED",
+          "API Key 加密自检失败，请检查 API_PROVIDER_SECRET"
+        );
+      }
+
+      apiKeyCiphertext =
+        encrypted;
     }
 
     const options =
@@ -532,7 +566,8 @@ export function createBuiltInProviderSettingsService(
     initialize,
     reload,
     listAdmin,
-    update
+    update,
+    getSecurityStatus
   };
 }
 
@@ -971,22 +1006,39 @@ function decryptSecretSafe(
   }
 }
 
-function encryptionKey():
-  Buffer {
+function isProviderSecretConfigured():
+  boolean {
   const secret =
     process.env
-      .API_PROVIDER_SECRET ||
-    process.env
-      .CSRF_SECRET;
+      .API_PROVIDER_SECRET
+      ?.trim();
 
   if (
     !secret ||
     secret.length < 32
   ) {
+    return false;
+  }
+
+  return !/^(?:replace-with-at-least-32-random-characters|change-me|your-secret|default)$/i
+    .test(secret);
+}
+
+function encryptionKey():
+  Buffer {
+  const secret =
+    process.env
+      .API_PROVIDER_SECRET
+      ?.trim();
+
+  if (
+    !secret ||
+    !isProviderSecretConfigured()
+  ) {
     throw new AuthError(
       503,
       "API_PROVIDER_SECRET_MISSING",
-      "服务端尚未配置 API_PROVIDER_SECRET"
+      "服务端必须配置长度至少 32 位的随机 API_PROVIDER_SECRET"
     );
   }
 

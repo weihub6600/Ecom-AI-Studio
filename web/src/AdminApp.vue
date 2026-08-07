@@ -352,6 +352,37 @@ function queryString(values: Record<string, string | number | undefined>) {
 function modelKey(model: Pick<AdminModelSetting, "provider" | "model">) { return `${model.provider}:${model.model}`; }
 function modelDraft(model: AdminModelSetting) { return modelDrafts.value[modelKey(model)] || (modelDrafts.value[modelKey(model)] = { enabled: model.enabled, points: String(model.points) }); }
 function statusLabel(status: AdminUserSummary["status"]) { return status === "pending" ? "待审核" : status === "active" ? "已启用" : status === "disabled" ? "已封禁" : "已拒绝"; }
+
+function loginClientLabel(userAgent?: string) {
+  if (!userAgent) return "未记录设备";
+
+  const browser =
+    /Edg\//.test(userAgent)
+      ? "Edge"
+      : /Chrome\//.test(userAgent)
+        ? "Chrome"
+        : /Firefox\//.test(userAgent)
+          ? "Firefox"
+          : /Safari\//.test(userAgent)
+            ? "Safari"
+            : "浏览器";
+
+  const system =
+    /Windows/i.test(userAgent)
+      ? "Windows"
+      : /Macintosh|Mac OS X/i.test(userAgent)
+        ? "macOS"
+        : /Android/i.test(userAgent)
+          ? "Android"
+          : /iPhone|iPad/i.test(userAgent)
+            ? "iOS/iPadOS"
+            : /Linux/i.test(userAgent)
+              ? "Linux"
+              : "未知系统";
+
+  return `${browser} · ${system}`;
+}
+
 function usageStatusLabel(status: UsageRecord["status"]) { return status === "success" ? "成功" : status === "submitted" ? "处理中" : "失败"; }
 function creditTitle(record: CreditRecord) {
   if (record.note === "新用户注册赠送") return "新用户注册赠送";
@@ -453,7 +484,7 @@ function auditLabel(action: string) {
                 <article v-for="record in detailRecords" :key="record.id">
                   <template v-if="detailTab === 'usage'"><div><strong>{{ (record as UsageRecord).model }}</strong><i :class="(record as UsageRecord).status">{{ usageStatusLabel((record as UsageRecord).status) }}</i></div><p>{{ (record as UsageRecord).provider }} · {{ (record as UsageRecord).imageCount }} 张 · {{ (record as UsageRecord).size }}</p><small>{{ formatDate(record.createdAt) }} · 积分 {{ formatPoints((record as UsageRecord).pointsCost) }}</small></template>
                   <template v-else-if="detailTab === 'credits'"><div><strong>{{ creditTitle(record as CreditRecord) }}</strong><em :class="(record as CreditRecord).amount >= 0 ? 'plus' : 'minus'">{{ (record as CreditRecord).amount >= 0 ? '+' : '' }}{{ formatPoints((record as CreditRecord).amount) }}</em></div><p>{{ (record as CreditRecord).note || '积分变动' }}</p><small>{{ formatDate(record.createdAt) }} · 余额 {{ formatPoints((record as CreditRecord).balanceAfter) }}</small></template>
-                  <template v-else><div><strong>{{ (record as LoginRecord).success ? '登录成功' : '登录失败' }}</strong><i :class="(record as LoginRecord).success ? 'success' : 'failed'">{{ (record as LoginRecord).success ? '成功' : '失败' }}</i></div><p>{{ (record as LoginRecord).clientIp || '未记录 IP' }} · {{ (record as LoginRecord).reason || '账号验证通过' }}</p><small>{{ formatDate(record.createdAt) }}</small></template>
+                  <template v-else><div><strong>{{ (record as LoginRecord).success ? '登录成功' : '登录失败' }}</strong><i :class="(record as LoginRecord).success ? 'success' : 'failed'">{{ (record as LoginRecord).success ? '成功' : '失败' }}</i></div><p>{{ (record as LoginRecord).clientIp || '未记录 IP' }} · {{ (record as LoginRecord).reason || '账号验证通过' }}</p><small :title="(record as LoginRecord).userAgent || '未记录 User-Agent'">{{ formatDate(record.createdAt) }} · {{ loginClientLabel((record as LoginRecord).userAgent) }}</small></template>
                 </article>
                 <div v-if="!detailRecords.length" class="admin-v10-empty">暂无记录</div>
               </div>
