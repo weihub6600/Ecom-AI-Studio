@@ -1,6 +1,11 @@
 import express, {
-  type Express
+  type ErrorRequestHandler,
+  type Express,
+  type RequestHandler
 } from "express";
+import {
+  AuthError
+} from "../auth.js";
 import path from "node:path";
 import type {
   AppContext
@@ -54,6 +59,69 @@ import {
 import {
   createSecurityService
 } from "../services/security.js";
+
+const apiNotFoundHandler:
+  RequestHandler =
+    (request, response) => {
+      response
+        .status(404)
+        .json({
+          error: {
+            code: "API_NOT_FOUND",
+            message:
+              `接口不存在：${request.method} ${request.originalUrl}`
+          }
+        });
+    };
+
+const globalApiErrorHandler:
+  ErrorRequestHandler =
+    (
+      error,
+      request,
+      response,
+      next
+    ) => {
+      if (response.headersSent) {
+        next(error);
+        return;
+      }
+
+      if (error instanceof AuthError) {
+        response
+          .status(error.status)
+          .json({
+            error: {
+              code: error.code,
+              message:
+                error.message
+            }
+          });
+        return;
+      }
+
+      console.error(
+        "Unhandled API error",
+        {
+          method:
+            request.method,
+          path:
+            request.originalUrl,
+          error
+        }
+      );
+
+      response
+        .status(500)
+        .json({
+          error: {
+            code:
+              "INTERNAL_SERVER_ERROR",
+            message:
+              "服务器内部错误"
+          }
+        });
+    };
 
 export function createApp(
   context: AppContext
@@ -260,6 +328,15 @@ app.use(createAccountRouter({
         .workerSecret,
     requireAuth
   }));
+  app.use(
+    "/api",
+    apiNotFoundHandler
+  );
+
+  app.use(
+    "/api",
+    globalApiErrorHandler
+  );
 
   app.use(express.static(context.webDist));
 

@@ -264,6 +264,11 @@ export function createBatchJobService(options: {
   let workerBusy = false;
   let stopped = false;
 
+  let workerFailureCount = 0;
+  let workerRetryAt = 0;
+  let lastWorkerErrorSignature = "";
+  let lastWorkerErrorLogAt = 0;
+
   function initialize():
     Promise<void> {
     if (!initialized) {
@@ -1256,7 +1261,8 @@ export function createBatchJobService(options: {
     Promise<void> {
     if (
       stopped ||
-      workerBusy
+      workerBusy ||
+      Date.now() < workerRetryAt
     ) {
       return;
     }
@@ -1266,13 +1272,86 @@ export function createBatchJobService(options: {
     try {
       await initialize();
       await processNext();
-    } catch (error) {
+
+      if (workerFailureCount > 0) {
+        console.log(
+          `Batch worker 已恢复，连续失败 ${workerFailureCount} 次`
+        );
+      }
+
+      workerFailureCount = 0;
+      workerRetryAt = 0;
+      lastWorkerErrorSignature = "";
+      lastWorkerErrorLogAt = 0;
+    }
+    catch (error) {
+      handleWorkerError(error);
+    }
+    finally {
+      workerBusy = false;
+    }
+  }
+
+
+  function handleWorkerError(
+    error: unknown
+  ): void {
+    workerFailureCount += 1;
+
+    const baseDelayMs =
+      readPositiveEnv(
+        "BATCH_WORKER_BACKOFF_BASE_MS",
+        2_000,
+        1_000
+      );
+
+    const maxDelayMs =
+      Math.max(
+        baseDelayMs,
+        readPositiveEnv(
+          "BATCH_WORKER_BACKOFF_MAX_MS",
+          60_000,
+          1_000
+        )
+      );
+
+    const delayMs =
+      Math.min(
+        maxDelayMs,
+        baseDelayMs *
+          2 ** Math.min(
+            workerFailureCount - 1,
+            10
+          )
+      );
+
+    workerRetryAt =
+      Date.now() + delayMs;
+
+    const signature =
+      error instanceof Error
+        ? `${error.name}:${error.message}`
+        : String(error);
+
+    const now = Date.now();
+    const shouldLog =
+      signature !==
+        lastWorkerErrorSignature ||
+      now -
+        lastWorkerErrorLogAt >=
+        60_000;
+
+    if (shouldLog) {
       console.error(
-        "Batch worker error",
+        `Batch worker error；${Math.round(delayMs / 1000)} 秒后重试（连续失败 ${workerFailureCount} 次）`,
         error
       );
-    } finally {
-      workerBusy = false;
+
+      lastWorkerErrorSignature =
+        signature;
+
+      lastWorkerErrorLogAt =
+        now;
     }
   }
 

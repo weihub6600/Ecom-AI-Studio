@@ -1,4 +1,7 @@
 import dotenv from "dotenv";
+import type {
+  Server
+} from "node:http";
 import path from "node:path";
 import {
   fileURLToPath
@@ -360,12 +363,13 @@ export async function startServer():
 
     }
 
-    await new Promise<void>(
-      (resolve) => {
-        server.close(
-          () => resolve()
-        );
-      }
+    await closeHttpServer(
+      server,
+      readPositiveInteger(
+        process.env
+          .SERVER_SHUTDOWN_TIMEOUT_MS,
+        15_000
+      )
     );
 
     await database.close()
@@ -393,4 +397,59 @@ export async function startServer():
       }
     );
   }
+}
+
+async function closeHttpServer(
+  server: Server,
+  timeoutMs: number
+): Promise<void> {
+  await new Promise<void>(
+    (resolve) => {
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+
+      const timer =
+        setTimeout(
+          () => {
+            console.warn(
+              `HTTP 连接在 ${timeoutMs}ms 内未全部关闭，正在强制断开剩余连接`
+            );
+
+            server
+              .closeAllConnections();
+
+            finish();
+          },
+          timeoutMs
+        );
+
+      timer.unref();
+
+      server.close(
+        () => finish()
+      );
+    }
+  );
+}
+
+function readPositiveInteger(
+  value: string | undefined,
+  fallback: number
+): number {
+  const numeric =
+    Number(value);
+
+  return (
+    Number.isInteger(numeric) &&
+    numeric > 0
+  )
+    ? numeric
+    : fallback;
 }

@@ -26,18 +26,93 @@ interface DatabaseConfig {
 
 export async function createAppDatabase(): Promise<AppDatabase> {
   const config = readDatabaseConfig();
-  if (config.autoCreateDatabase) await ensureDatabaseExists(config);
+  const maxAttempts = positiveInteger(
+    process.env.MYSQL_STARTUP_RETRY_ATTEMPTS,
+    12
+  );
+  const baseDelayMs = positiveInteger(
+    process.env.MYSQL_STARTUP_RETRY_BASE_MS,
+    1_000
+  );
+  const maxDelayMs = Math.max(
+    baseDelayMs,
+    positiveInteger(
+      process.env.MYSQL_STARTUP_RETRY_MAX_MS,
+      5_000
+    )
+  );
 
-  const pool = mysql.createPool(createPoolOptions(config, true));
-  await pool.query("SELECT 1");
-  for (const statement of SCHEMA_STATEMENTS) await pool.query(statement);
+  for (
+    let attempt = 1;
+    attempt <= maxAttempts;
+    attempt += 1
+  ) {
+    let pool: Pool | undefined;
 
-  return {
-    pool,
-    databaseName: config.database,
-    storageLabel: `mysql://${config.host}:${config.port}/${config.database}`,
-    close: () => pool.end()
-  };
+    try {
+      if (config.autoCreateDatabase) {
+        await ensureDatabaseExists(config);
+      }
+
+      pool = mysql.createPool(
+        createPoolOptions(config, true)
+      );
+
+      await pool.query("SELECT 1");
+
+      for (const statement of SCHEMA_STATEMENTS) {
+        await pool.query(statement);
+      }
+
+      if (attempt > 1) {
+        console.log(
+          `MySQL 已恢复连接，第 ${attempt} 次尝试成功`
+        );
+      }
+
+      const readyPool = pool;
+
+      return {
+        pool: readyPool,
+        databaseName: config.database,
+        storageLabel:
+          `mysql://${config.host}:${config.port}/${config.database}`,
+        close: () => readyPool.end()
+      };
+    }
+    catch (error) {
+      if (pool) {
+        await pool.end()
+          .catch(() => undefined);
+      }
+
+      const retryable =
+        isRetryableDatabaseError(error);
+
+      if (
+        !retryable ||
+        attempt >= maxAttempts
+      ) {
+        throw error;
+      }
+
+      const delayMs = Math.min(
+        maxDelayMs,
+        baseDelayMs *
+          2 ** Math.min(attempt - 1, 10)
+      );
+
+      console.warn(
+        `MySQL 暂不可用（第 ${attempt}/${maxAttempts} 次），${delayMs}ms 后重试：${databaseErrorMessage(error)}`
+      );
+
+      await wait(delayMs);
+    }
+  }
+
+  throw new Error(
+    "MySQL 初始化失败"
+  );
 }
 
 export async function withTransaction<T>(
@@ -130,6 +205,63 @@ function createPoolOptions(config: DatabaseConfig, includeDatabase: boolean): Po
     decimalNumbers: true,
     ssl: config.ssl ? {} : undefined
   };
+}
+
+function isRetryableDatabaseError(
+  error: unknown
+): boolean {
+  if (
+    !error ||
+    typeof error !== "object"
+  ) {
+    return false;
+  }
+
+  const code =
+    "code" in error
+      ? String(
+          (error as { code?: unknown })
+            .code || ""
+        )
+      : "";
+
+  return new Set([
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "EAI_AGAIN",
+    "EPIPE",
+    "PROTOCOL_CONNECTION_LOST",
+    "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR",
+    "ER_CON_COUNT_ERROR",
+    "ER_SERVER_SHUTDOWN"
+  ]).has(code);
+}
+
+function databaseErrorMessage(
+  error: unknown
+): string {
+  if (error instanceof Error) {
+    return error.message.slice(0, 300);
+  }
+
+  return String(error)
+    .slice(0, 300);
+}
+
+function wait(
+  delayMs: number
+): Promise<void> {
+  return new Promise(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        delayMs
+      );
+    }
+  );
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
