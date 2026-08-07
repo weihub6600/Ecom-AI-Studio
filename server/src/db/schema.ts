@@ -154,7 +154,7 @@ export const SCHEMA_STATEMENTS = [
     owner_user_id CHAR(36) NULL,
     client_id VARCHAR(160) NULL,
     generation_task_id CHAR(36) NULL,
-    provider ENUM('lingke','grsai','nanobanana') NOT NULL,
+    provider VARCHAR(80) NOT NULL,
     provider_name VARCHAR(80) NOT NULL,
     model VARCHAR(160) NOT NULL,
     prompt TEXT NOT NULL,
