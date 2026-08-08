@@ -195,3 +195,21 @@
   }
 }
 /* ACCOUNT_HISTORY_V4_END */
+
+/* SEVENTH_BATCH_ACCOUNT_NAV */
+.account-sidebar nav{
+  min-height:0;
+  overflow-y:auto;
+  padding-right:3px
+}
+.account-sidebar nav::-webkit-scrollbar{
+  width:4px
+}
+.account-sidebar nav::-webkit-scrollbar-thumb{
+  border-radius:999px;
+  background:#3d405c
+}
+.account-sidebar-bottom{
+  flex:0 0 auto;
+  padding-top:10px
+}

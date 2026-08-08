@@ -28,6 +28,17 @@ import {
   updateStoragePackage,
   updateStorageSettings
 } from "../services/storage-entitlements.js";
+import {
+  createUserGroup,
+  deleteSiteMessage,
+  deleteUserGroup,
+  listAdminSiteMessages,
+  listAudienceUsers,
+  listUserGroups,
+  sendSiteMessage,
+  setAudienceUserGroups,
+  updateUserGroup
+} from "../services/user-messaging.js";
 import { Router, type Request, type RequestHandler } from "express";
 import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
@@ -115,6 +126,438 @@ export function createAdminRouter(options: {
       return sendAuthError(response, error, "删除公告失败");
     }
   });
+
+  router.get(
+    "/api/admin/audience/groups",
+    ...protectedAdmin,
+    async (_request, response) => {
+      try {
+        return response.json({
+          groups:
+            await listUserGroups(
+              database
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取用户分组失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/audience/groups",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const group =
+          await createUserGroup(
+            database,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "audience.group.create",
+          targetType:
+            "user_group",
+          targetId:
+            group.id,
+          summary:
+            "创建用户分组：" +
+            group.name,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response
+          .status(201)
+          .json({
+            success: true,
+            group
+          });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "创建用户分组失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/audience/groups/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_USER_GROUP_ID",
+            "缺少用户分组 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const group =
+          await updateUserGroup(
+            database,
+            id,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "audience.group.update",
+          targetType:
+            "user_group",
+          targetId:
+            id,
+          summary:
+            "更新用户分组：" +
+            group.name,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          group
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "更新用户分组失败"
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/admin/audience/groups/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_USER_GROUP_ID",
+            "缺少用户分组 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const group =
+          await deleteUserGroup(
+            database,
+            id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "audience.group.delete",
+          targetType:
+            "user_group",
+          targetId:
+            id,
+          summary:
+            "删除用户分组：" +
+            group.name,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "删除用户分组失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/audience/users",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const result =
+          await listAudienceUsers(
+            database,
+            {
+              ...readPage(
+                request
+              ),
+              search:
+                readText(
+                  request.query.search,
+                  80
+                ),
+              status:
+                readText(
+                  request.query.status,
+                  20
+                )
+            }
+          );
+
+        return response.json({
+          users:
+            result.items,
+          pagination:
+            result.pagination
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取用户分组成员失败"
+        );
+      }
+    }
+  );
+
+  router.put(
+    "/api/admin/audience/users/:id/groups",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const userId =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_USER_ID",
+            "缺少用户 ID"
+          );
+
+        if (!userId) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const user =
+          await setAudienceUserGroups(
+            database,
+            userId,
+            request.body
+              ?.groupIds,
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "audience.membership.update",
+          targetType:
+            "user",
+          targetId:
+            userId,
+          summary:
+            "更新用户分组：" +
+            user.username,
+          details: {
+            groupIds:
+              user.groupIds
+          },
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          user
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "保存用户分组失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/messages",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const result =
+          await listAdminSiteMessages(
+            database,
+            readPage(
+              request
+            )
+          );
+
+        return response.json({
+          messages:
+            result.items,
+          pagination:
+            result.pagination
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取站内消息失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/messages",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const message =
+          await sendSiteMessage(
+            database,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "message.send",
+          targetType:
+            "site_message",
+          targetId:
+            message.id,
+          summary:
+            "发送站内消息：" +
+            message.title,
+          details: {
+            targetType:
+              message.targetType,
+            deliveredCount:
+              message.deliveredCount
+          },
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response
+          .status(201)
+          .json({
+            success: true,
+            message
+          });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "发送站内消息失败"
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/admin/messages/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_MESSAGE_ID",
+            "缺少消息 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const message =
+          await deleteSiteMessage(
+            database,
+            id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "message.delete",
+          targetType:
+            "site_message",
+          targetId:
+            id,
+          summary:
+            "删除站内消息：" +
+            message.title,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "删除站内消息失败"
+        );
+      }
+    }
+  );
 
   router.get(
     "/api/admin/gallery",

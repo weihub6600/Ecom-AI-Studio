@@ -20,10 +20,11 @@ import ApiProviderManager from "./components/ApiProviderManager.vue";
 import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue";
 import AdminGalleryManager from "./components/AdminGalleryManager.vue";
 import AdminStoragePackageManager from "./components/AdminStoragePackageManager.vue";
+import AdminUserMessagingManager from "./components/AdminUserMessagingManager.vue";
 import AdminUserAccountTools from "./components/AdminUserAccountTools.vue";
 import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "audience" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -73,6 +74,7 @@ const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "gallery", label: "灵感广场", hint: "投稿审核与精选" },
   { id: "storage", label: "存储权益", hint: "额度、期限与方案" },
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
+  { id: "audience", label: "用户运营", hint: "分组与站内消息" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
   { id: "providers", label: "API 服务商", hint: "新增服务商和模型参数" },
@@ -527,6 +529,10 @@ function auditLabel(action: string) {
             </template>
           </aside>
         </div>
+      </section>
+
+      <section v-else-if="activeSection === 'audience'" class="admin-v10-section">
+        <AdminUserMessagingManager />
       </section>
 
       <section v-else-if="activeSection === 'cards'" class="admin-v10-section">

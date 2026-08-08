@@ -12,6 +12,7 @@ import AccountProfileSecurity from "./components/AccountProfileSecurity.vue";
 import WorkLibrary from "./components/WorkLibrary.vue";
 import GallerySubmissionCenter from "./components/GallerySubmissionCenter.vue";
 import StorageRightsPanel from "./components/StorageRightsPanel.vue";
+import AccountMessageCenter from "./components/AccountMessageCenter.vue";
 import BatchStudio from "./components/BatchStudio.vue";
 import AccountHistory from "./components/AccountHistory.vue";
 import InvitationRewardsPanel from "./components/InvitationRewardsPanel.vue";
@@ -30,6 +31,7 @@ type AccountSection =
   | "library"
   | "gallery"
   | "storage"
+  | "messages"
   | "profile"
   | "history"
   | "batch"
@@ -87,6 +89,11 @@ const sections:
       id: "storage",
       label: "存储权益",
       hint: "数量、期限与兑换"
+    },
+    {
+      id: "messages",
+      label: "消息中心",
+      hint: "通知、提醒与运营消息"
     },
     {
       id: "profile",
@@ -467,6 +474,10 @@ function creditTitle(
           :user="user"
           @balance-updated="updateBalance"
         />
+      </section>
+
+      <section v-else-if="activeSection === 'messages'" class="account-content">
+        <AccountMessageCenter />
       </section>
 
       <section v-else-if="activeSection === 'profile'" class="account-content">

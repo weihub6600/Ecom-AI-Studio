@@ -37,6 +37,11 @@ import {
   redeemStoragePackage
 } from "../services/storage-entitlements.js";
 import {
+  listUserSiteMessages,
+  markAllUserMessagesRead,
+  markUserMessageRead
+} from "../services/user-messaging.js";
+import {
   getAuthenticatedUser
 } from "../middleware/auth.js";
 import {
@@ -76,6 +81,112 @@ export function createAccountRouter(
         });
       } catch (error) {
         return sendAuthError(response, error, "读取公告失败");
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/messages",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        return response.json(
+          await listUserSiteMessages(
+            database,
+            user.id,
+            request.query.limit
+          )
+        );
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取消息中心失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/account/messages/:id/read",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_MESSAGE_ID",
+                message:
+                  "缺少消息标识"
+              }
+            });
+        }
+
+        const message =
+          await markUserMessageRead(
+            database,
+            user.id,
+            id
+          );
+
+        return response.json({
+          success: true,
+          message
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "标记消息已读失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/messages/read-all",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const changed =
+          await markAllUserMessagesRead(
+            database,
+            user.id
+          );
+
+        return response.json({
+          success: true,
+          changed
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "全部标记已读失败"
+        );
       }
     }
   );

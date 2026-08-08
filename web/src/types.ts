@@ -450,3 +450,58 @@ export interface StorageAccountSummary {
   imageLimitBonus: number;
   retentionDaysBonus: number;
 }
+
+export interface UserGroup {
+  id: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  memberCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminAudienceUser {
+  id: string;
+  username: string;
+  nickname?: string;
+  status: UserStatus;
+  createdAt: string;
+  lastLoginAt?: string;
+  groupIds: string[];
+}
+
+export type SiteMessageKind =
+  | "info"
+  | "success"
+  | "warning";
+
+export type SiteMessageTargetType =
+  | "all"
+  | "group"
+  | "user";
+
+export interface SiteMessage {
+  id: string;
+  title: string;
+  content: string;
+  kind: SiteMessageKind;
+  createdAt: string;
+  readAt?: string;
+  read: boolean;
+}
+
+export interface AdminSiteMessage {
+  id: string;
+  title: string;
+  content: string;
+  kind: SiteMessageKind;
+  targetType: SiteMessageTargetType;
+  targetGroupId?: string;
+  targetGroupName?: string;
+  targetUserId?: string;
+  targetUsername?: string;
+  deliveredCount: number;
+  readCount: number;
+  createdAt: string;
+}

@@ -309,6 +309,61 @@ export const SCHEMA_STATEMENTS = [
     CONSTRAINT fk_app_storage_entitlements_transaction FOREIGN KEY (credit_transaction_id) REFERENCES app_credit_transactions(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 
+  `CREATE TABLE IF NOT EXISTS app_user_groups (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL,
+    description VARCHAR(300) NULL,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 100,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    updated_by_user_id CHAR(36) NULL,
+    UNIQUE KEY uq_app_user_groups_name (name),
+    KEY idx_app_user_groups_sort (sort_order, created_at),
+    CONSTRAINT fk_app_user_groups_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_user_group_members (
+    group_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    added_at DATETIME(3) NOT NULL,
+    added_by_user_id CHAR(36) NULL,
+    PRIMARY KEY (group_id, user_id),
+    KEY idx_app_user_group_members_user (user_id, group_id),
+    CONSTRAINT fk_app_user_group_members_group FOREIGN KEY (group_id) REFERENCES app_user_groups(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_user_group_members_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_user_group_members_actor FOREIGN KEY (added_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_site_messages (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    title VARCHAR(80) NOT NULL,
+    content VARCHAR(2000) NOT NULL,
+    kind ENUM('info','success','warning') NOT NULL DEFAULT 'info',
+    target_type ENUM('all','group','user') NOT NULL DEFAULT 'all',
+    target_group_id CHAR(36) NULL,
+    target_user_id CHAR(36) NULL,
+    delivered_count INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    created_by_user_id CHAR(36) NULL,
+    KEY idx_app_site_messages_created (created_at),
+    KEY idx_app_site_messages_target_group (target_group_id),
+    KEY idx_app_site_messages_target_user (target_user_id),
+    CONSTRAINT fk_app_site_messages_group FOREIGN KEY (target_group_id) REFERENCES app_user_groups(id) ON DELETE SET NULL,
+    CONSTRAINT fk_app_site_messages_user FOREIGN KEY (target_user_id) REFERENCES app_users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_app_site_messages_actor FOREIGN KEY (created_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_site_message_recipients (
+    message_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    read_at DATETIME(3) NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (message_id, user_id),
+    KEY idx_app_site_message_recipients_user (user_id, read_at, created_at),
+    CONSTRAINT fk_app_site_message_recipients_message FOREIGN KEY (message_id) REFERENCES app_site_messages(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_site_message_recipients_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
   `CREATE TABLE IF NOT EXISTS app_admin_audit_logs (
     id CHAR(36) NOT NULL PRIMARY KEY,
     actor_user_id CHAR(36) NULL,
