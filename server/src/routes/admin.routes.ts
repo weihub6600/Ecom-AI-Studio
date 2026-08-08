@@ -15,6 +15,19 @@ import {
   listAdminAnnouncements,
   updateAnnouncement
 } from "../services/announcements.js";
+import {
+  deleteAdminGallerySubmission,
+  listAdminGallerySubmissions,
+  reviewGallerySubmission
+} from "../services/gallery.js";
+import {
+  createStoragePackage,
+  deleteStoragePackage,
+  listStoragePackages,
+  readStorageSettings,
+  updateStoragePackage,
+  updateStorageSettings
+} from "../services/storage-entitlements.js";
 import { Router, type Request, type RequestHandler } from "express";
 import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
@@ -102,6 +115,427 @@ export function createAdminRouter(options: {
       return sendAuthError(response, error, "删除公告失败");
     }
   });
+
+  router.get(
+    "/api/admin/gallery",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        return response.json(
+          await listAdminGallerySubmissions(
+            database,
+            {
+              ...readPage(
+                request
+              ),
+              status:
+                readText(
+                  request.query.status,
+                  20
+                ) as
+                  | "all"
+                  | "pending"
+                  | "approved"
+                  | "rejected"
+                  | "withdrawn"
+                  | undefined,
+              search:
+                readText(
+                  request.query.search,
+                  120
+                )
+            }
+          )
+        );
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取作品投稿失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/gallery/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_GALLERY_ID",
+            "缺少投稿 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const submission =
+          await reviewGallerySubmission(
+            database,
+            id,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "gallery.review",
+          targetType:
+            "gallery_submission",
+          targetId:
+            id,
+          summary:
+            submission.status ===
+              "approved"
+              ? "通过作品投稿：" +
+                submission.title
+              : submission.status ===
+                  "rejected"
+                ? "拒绝作品投稿：" +
+                  submission.title
+                : "更新作品投稿：" +
+                  submission.title,
+          details: {
+            status:
+              submission.status,
+            featured:
+              submission.featured
+          },
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          submission
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "保存作品审核失败"
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/admin/gallery/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_GALLERY_ID",
+            "缺少投稿 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const removed =
+          await deleteAdminGallerySubmission(
+            database,
+            id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "gallery.delete",
+          targetType:
+            "gallery_submission",
+          targetId:
+            id,
+          summary:
+            "删除投稿记录：" +
+            removed.title,
+          details: {
+            status:
+              removed.status
+          },
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "删除投稿记录失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/storage-packages",
+    ...protectedAdmin,
+    async (_request, response) => {
+      try {
+        const [
+          settings,
+          packages
+        ] =
+          await Promise.all([
+            readStorageSettings(
+              database
+            ),
+            listStoragePackages(
+              database,
+              true
+            )
+          ]);
+
+        return response.json({
+          settings,
+          packages
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取存储策略失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/storage-settings",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const settings =
+          await updateStorageSettings(
+            database,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "storage.settings",
+          targetType:
+            "storage_policy",
+          targetId:
+            "1",
+          summary:
+            "更新服务器存储策略",
+          details:
+            settings,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          settings
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "保存存储策略失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/storage-packages",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const storagePackage =
+          await createStoragePackage(
+            database,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "storage.package.create",
+          targetType:
+            "storage_package",
+          targetId:
+            storagePackage.id,
+          summary:
+            "创建存储方案：" +
+            storagePackage.name,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response
+          .status(201)
+          .json({
+            success: true,
+            package:
+              storagePackage
+          });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "创建存储方案失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/storage-packages/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_STORAGE_PACKAGE",
+            "缺少存储方案 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const storagePackage =
+          await updateStoragePackage(
+            database,
+            id,
+            request.body || {},
+            actor.id
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "storage.package.update",
+          targetType:
+            "storage_package",
+          targetId:
+            id,
+          summary:
+            "更新存储方案：" +
+            storagePackage.name,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          package:
+            storagePackage
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "更新存储方案失败"
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/admin/storage-packages/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          requiredId(
+            request.params.id,
+            response,
+            "INVALID_STORAGE_PACKAGE",
+            "缺少存储方案 ID"
+          );
+
+        if (!id) return;
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        await deleteStoragePackage(
+          database,
+          id
+        );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "storage.package.delete",
+          targetType:
+            "storage_package",
+          targetId:
+            id,
+          summary:
+            "删除存储方案",
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "删除存储方案失败"
+        );
+      }
+    }
+  );
 
   router.get(
     "/api/admin/tasks",

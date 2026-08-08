@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  onBeforeUnmount,
   onMounted,
   ref
 } from "vue";
@@ -10,8 +11,7 @@ import {
 } from "../api/client";
 import {
   formatDate,
-  formatDuration,
-  providerDisplayName
+  formatDuration
 } from "../utils/format";
 
 interface LibraryImage {
@@ -139,8 +139,19 @@ const selectedCount = computed(() =>
 );
 
 onMounted(async () => {
+  window.addEventListener(
+    "keydown",
+    handleLibraryKeydown
+  );
   await migrateLocalFavorites();
   await loadLibrary(true);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener(
+    "keydown",
+    handleLibraryKeydown
+  );
 });
 
 async function loadLibrary(
@@ -751,20 +762,37 @@ async function runAction(
   }
 }
 
-function displayProvider(item: LibraryItem) {
+function displayModel(item: LibraryItem): string {
+  let model = item.model.trim();
+  const provider = item.provider.trim();
+
   if (
-    item.provider === "lingke" ||
-    item.provider === "grsai" ||
-    item.provider === "nanobanana"
+    provider &&
+    model.toLowerCase().startsWith(
+      provider.toLowerCase() + "-"
+    )
   ) {
-    return providerDisplayName(
-      item.provider,
-      item.providerName
-    );
+    model = model.slice(provider.length + 1);
   }
 
-  return item.providerName ||
-    item.provider;
+  if (
+    model.toLowerCase().startsWith("gpt-")
+  ) {
+    model = model.slice(4);
+  }
+
+  return model || "AI 模型";
+}
+
+function handleLibraryKeydown(
+  event: KeyboardEvent
+) {
+  if (
+    event.key === "Escape" &&
+    detailItem.value
+  ) {
+    detailItem.value = null;
+  }
 }
 
 function openImage(url: string) {
@@ -1157,8 +1185,7 @@ function openImage(url: string) {
 
         <div class="work-library-card-body">
           <header>
-            <strong>{{ item.model }}</strong>
-            <small>{{ displayProvider(item) }}</small>
+            <strong>{{ displayModel(item) }}</strong>
           </header>
 
           <p>
@@ -1248,7 +1275,7 @@ function openImage(url: string) {
         <header>
           <div>
             <span>作品详情</span>
-            <h4>{{ detailItem.model }}</h4>
+            <h4>{{ displayModel(detailItem) }}</h4>
           </div>
           <button
             type="button"
@@ -1326,7 +1353,7 @@ function openImage(url: string) {
             </div>
             <div>
               <dt>服务商</dt>
-              <dd>{{ displayProvider(detailItem) }}</dd>
+              <dd>{{ displayModel(detailItem) }}</dd>
             </div>
             <div>
               <dt>尺寸</dt>

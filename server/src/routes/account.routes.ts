@@ -11,6 +11,9 @@ import type {
   AuthService
 } from "../auth.js";
 import type {
+  HistoryService
+} from "../history.js";
+import type {
   ModelSettingsService
 } from "../services/model-settings.js";
 import {
@@ -22,6 +25,17 @@ import {
 import {
   listActiveAnnouncements
 } from "../services/announcements.js";
+import {
+  listGalleryEligibleWorks,
+  listPublicGallery,
+  listUserGallerySubmissions,
+  submitGalleryWork,
+  withdrawGallerySubmission
+} from "../services/gallery.js";
+import {
+  getStorageAccountSummary,
+  redeemStoragePackage
+} from "../services/storage-entitlements.js";
 import {
   getAuthenticatedUser
 } from "../middleware/auth.js";
@@ -35,6 +49,7 @@ export function createAccountRouter(
   options: {
     database: AppDatabase;
     authService: AuthService;
+    historyService: HistoryService;
     modelSettingsService:
       ModelSettingsService;
     requireAuth:
@@ -45,6 +60,7 @@ export function createAccountRouter(
   const {
     database,
     authService,
+    historyService,
     modelSettingsService,
     requireAuth
   } = options;
@@ -60,6 +76,179 @@ export function createAccountRouter(
         });
       } catch (error) {
         return sendAuthError(response, error, "读取公告失败");
+      }
+    }
+  );
+
+  router.get(
+    "/api/gallery",
+    async (request, response) => {
+      try {
+        return response.json(
+          await listPublicGallery(
+            database,
+            {
+              page:
+                readQueryNumber(
+                  request.query.page,
+                  1
+                ),
+              pageSize:
+                readQueryNumber(
+                  request.query.pageSize,
+                  24
+                ),
+              search:
+                readQueryText(
+                  request.query.search
+                ),
+              provider:
+                readQueryText(
+                  request.query.provider
+                ),
+              sort:
+                request.query.sort ===
+                  "newest"
+                  ? "newest"
+                  : "featured",
+              featured:
+                request.query.featured ===
+                  "true" ||
+                request.query.featured ===
+                  "1"
+            }
+          )
+        );
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取作品广场失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/gallery/:id/image",
+    async (request, response) => {
+      try {
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_GALLERY_ID",
+                message:
+                  "作品标识不正确"
+              }
+            });
+        }
+
+        const [rows] =
+          await database.pool.query<
+            RowDataPacket[]
+          >(
+            `SELECT i.file_name
+             FROM app_gallery_submissions s
+             INNER JOIN app_history_images i
+               ON i.id = s.image_id
+             WHERE
+               s.id = ?
+               AND s.status = 'approved'
+             LIMIT 1`,
+            [id]
+          );
+
+        const fileName =
+          rows[0]?.file_name
+            ? String(
+                rows[0].file_name
+              )
+            : "";
+
+        if (!fileName) {
+          return response
+            .status(404)
+            .json({
+              error: {
+                code:
+                  "GALLERY_IMAGE_NOT_FOUND",
+                message:
+                  "作品图片不存在"
+              }
+            });
+        }
+
+        const filePath =
+          historyService
+            .resolveGeneratedFile(
+              fileName
+            );
+
+        if (!filePath) {
+          return response
+            .status(404)
+            .json({
+              error: {
+                code:
+                  "GALLERY_IMAGE_NOT_FOUND",
+                message:
+                  "作品图片不存在"
+              }
+            });
+        }
+
+        response.setHeader(
+          "Cache-Control",
+          "public, max-age=3600"
+        );
+
+        return response.sendFile(
+          filePath,
+          {
+            dotfiles: "deny"
+          },
+          (error) => {
+            if (
+              error &&
+              !response.headersSent
+            ) {
+              response
+                .status(404)
+                .json({
+                  error: {
+                    code:
+                      "GALLERY_IMAGE_NOT_FOUND",
+                    message:
+                      "作品图片不存在"
+                  }
+                });
+            }
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Gallery image access error",
+          error
+        );
+
+        return response
+          .status(500)
+          .json({
+            error: {
+              code:
+                "GALLERY_IMAGE_ACCESS_ERROR",
+              message:
+                "读取作品图片失败"
+            }
+          });
       }
     }
   );
@@ -351,6 +540,218 @@ export function createAccountRouter(
           response,
           error,
           "关联任务结果失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/gallery/eligible",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        return response.json({
+          works:
+            await listGalleryEligibleWorks(
+              database,
+              user.id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取可投稿作品失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/gallery/submissions",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        return response.json({
+          submissions:
+            await listUserGallerySubmissions(
+              database,
+              user.id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取投稿记录失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/gallery/submissions",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const submission =
+          await submitGalleryWork(
+            database,
+            user.id,
+            request.body || {}
+          );
+
+        return response
+          .status(201)
+          .json({
+            success: true,
+            submission
+          });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "提交作品失败"
+        );
+      }
+    }
+  );
+
+  router.delete(
+    "/api/account/gallery/submissions/:id",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_GALLERY_ID",
+                message:
+                  "缺少投稿标识"
+              }
+            });
+        }
+
+        await withdrawGallerySubmission(
+          database,
+          user.id,
+          id
+        );
+
+        return response.json({
+          success: true
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "撤回投稿失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/storage",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        return response.json(
+          await getStorageAccountSummary(
+            database,
+            user.id
+          )
+        );
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取存储权益失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/storage/redeem",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const packageId =
+          typeof request.body
+            ?.packageId === "string"
+            ? request.body
+                .packageId
+                .trim()
+            : "";
+
+        if (!packageId) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_STORAGE_PACKAGE",
+                message:
+                  "请选择存储兑换方案"
+              }
+            });
+        }
+
+        const result =
+          await redeemStoragePackage(
+            database,
+            user.id,
+            packageId
+          );
+
+        return response.json({
+          success: true,
+          ...result
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "兑换存储权益失败"
         );
       }
     }

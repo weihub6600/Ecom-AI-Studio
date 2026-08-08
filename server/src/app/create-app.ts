@@ -266,6 +266,7 @@ export function createApp(
 app.use(createAccountRouter({
     database: context.database,
     authService: context.authService,
+    historyService: context.historyService,
     modelSettingsService:
       context.modelSettingsService,
     requireAuth

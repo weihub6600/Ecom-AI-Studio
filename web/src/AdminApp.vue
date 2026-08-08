@@ -18,10 +18,12 @@ import type {
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
 import ApiProviderManager from "./components/ApiProviderManager.vue";
 import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue";
+import AdminGalleryManager from "./components/AdminGalleryManager.vue";
+import AdminStoragePackageManager from "./components/AdminStoragePackageManager.vue";
 import AdminUserAccountTools from "./components/AdminUserAccountTools.vue";
 import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "tasks" | "announcements" | "users" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -68,6 +70,8 @@ const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "dashboard", label: "数据总览", hint: "运营与系统状态" },
   { id: "tasks", label: "任务运维", hint: "健康、异常与恢复" },
   { id: "announcements", label: "公告管理", hint: "首页通知与发布" },
+  { id: "gallery", label: "灵感广场", hint: "投稿审核与精选" },
+  { id: "storage", label: "存储权益", hint: "额度、期限与方案" },
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
@@ -398,11 +402,12 @@ function loginClientLabel(userAgent?: string) {
 
 function usageStatusLabel(status: UsageRecord["status"]) { return status === "success" ? "成功" : status === "submitted" ? "处理中" : "失败"; }
 function creditTitle(record: CreditRecord) {
+  if (record.note?.startsWith("存储权益兑换：")) return "存储权益兑换";
   if (record.note === "新用户注册赠送") return "新用户注册赠送";
   return record.type === "generation_charge" ? "AI 生图扣费" : record.type === "generation_refund" ? "生成退款" : record.type === "card_recharge" ? "卡密充值" : record.amount >= 0 ? "站长增加积分" : "站长扣减积分";
 }
 function auditLabel(action: string) {
-  const labels: Record<string, string> = { "user.update": "更新用户", "user.force_logout": "强制退出", "credit.adjust": "调整积分", "card.generate": "生成卡密", "card.delete": "删除卡密", "model.update": "模型设置" };
+  const labels: Record<string, string> = { "user.update": "更新用户", "user.force_logout": "强制退出", "credit.adjust": "调整积分", "card.generate": "生成卡密", "card.delete": "删除卡密", "model.update": "模型设置", "gallery.review": "作品审核", "storage.settings": "存储策略", "storage.package.create": "创建存储方案", "storage.package.update": "更新存储方案", "storage.package.delete": "删除存储方案" };
   return labels[action] || action;
 }
 </script>
@@ -470,6 +475,14 @@ function auditLabel(action: string) {
 
       <section v-else-if="activeSection === 'announcements'" class="admin-v10-section">
         <AdminAnnouncementManager />
+      </section>
+
+      <section v-else-if="activeSection === 'gallery'" class="admin-v10-section">
+        <AdminGalleryManager />
+      </section>
+
+      <section v-else-if="activeSection === 'storage'" class="admin-v10-section">
+        <AdminStoragePackageManager />
       </section>
 
       <section v-else-if="activeSection === 'users'" class="admin-v10-section">

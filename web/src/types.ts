@@ -348,3 +348,105 @@ export interface TaskRecoveryStats {
   failed: number;
   errors: number;
 }
+
+export type GalleryStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "withdrawn";
+
+export interface GalleryItem {
+  id: string;
+  historyId: string;
+  imageId: string;
+  imageUrl: string;
+  width?: number;
+  height?: number;
+  title: string;
+  description?: string;
+  creatorName: string;
+  username?: string;
+  provider: string;
+  model: string;
+  prompt?: string;
+  showPrompt: boolean;
+  status: GalleryStatus;
+  featured: boolean;
+  rejectionReason?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface GalleryEligibleWork {
+  historyId: string;
+  imageId: string;
+  imageUrl: string;
+  width?: number;
+  height?: number;
+  provider: string;
+  model: string;
+  prompt: string;
+  createdAt: string;
+}
+
+export interface GallerySummary {
+  total: number;
+  creators: number;
+  featured: number;
+  providers: string[];
+}
+
+export interface GalleryAdminSummary {
+  pending: number;
+  approved: number;
+  rejected: number;
+  withdrawn: number;
+  featured: number;
+}
+
+export interface StorageSettings {
+  enforcementEnabled: boolean;
+  baseImageLimit: number;
+  baseRetentionDays: number;
+  graceDays: number;
+  updatedAt: string;
+}
+
+export interface StoragePackage {
+  id: string;
+  name: string;
+  description?: string;
+  imageLimitBonus: number;
+  retentionDaysBonus: number;
+  validDays: number;
+  pointsCost: number;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StorageEntitlement {
+  id: string;
+  packageId?: string;
+  packageName: string;
+  imageLimitBonus: number;
+  retentionDaysBonus: number;
+  pointsCost: number;
+  purchasedAt: string;
+  expiresAt: string;
+  inGrace: boolean;
+}
+
+export interface StorageAccountSummary {
+  settings: StorageSettings;
+  packages: StoragePackage[];
+  entitlements: StorageEntitlement[];
+  currentImageCount: number;
+  currentHistoryCount: number;
+  effectiveImageLimit: number;
+  effectiveRetentionDays: number;
+  imageLimitBonus: number;
+  retentionDaysBonus: number;
+}

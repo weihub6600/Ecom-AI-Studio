@@ -10,6 +10,8 @@ import {
 } from "./api/client";
 import AccountProfileSecurity from "./components/AccountProfileSecurity.vue";
 import WorkLibrary from "./components/WorkLibrary.vue";
+import GallerySubmissionCenter from "./components/GallerySubmissionCenter.vue";
+import StorageRightsPanel from "./components/StorageRightsPanel.vue";
 import BatchStudio from "./components/BatchStudio.vue";
 import AccountHistory from "./components/AccountHistory.vue";
 import InvitationRewardsPanel from "./components/InvitationRewardsPanel.vue";
@@ -26,6 +28,8 @@ import {
 
 type AccountSection =
   | "library"
+  | "gallery"
+  | "storage"
   | "profile"
   | "history"
   | "batch"
@@ -73,6 +77,16 @@ const sections:
       id: "library",
       label: "作品库",
       hint: "收藏、分类与回收站"
+    },
+    {
+      id: "gallery",
+      label: "灵感广场",
+      hint: "投稿与公开展示"
+    },
+    {
+      id: "storage",
+      label: "存储权益",
+      hint: "数量、期限与兑换"
     },
     {
       id: "profile",
@@ -325,6 +339,14 @@ function usageLabel(
 function creditTitle(
   record: CreditRecord
 ): string {
+  if (
+    record.note?.startsWith(
+      "存储权益兑换："
+    )
+  ) {
+    return "存储权益兑换";
+  }
+
   if (record.note === "新用户注册赠送") {
     return "新用户注册赠送";
   }
@@ -434,6 +456,17 @@ function creditTitle(
 
       <section v-if="activeSection === 'library'" class="account-content">
         <WorkLibrary :user-id="user.id" />
+      </section>
+
+      <section v-else-if="activeSection === 'gallery'" class="account-content">
+        <GallerySubmissionCenter />
+      </section>
+
+      <section v-else-if="activeSection === 'storage'" class="account-content">
+        <StorageRightsPanel
+          :user="user"
+          @balance-updated="updateBalance"
+        />
       </section>
 
       <section v-else-if="activeSection === 'profile'" class="account-content">

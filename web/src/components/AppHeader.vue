@@ -39,6 +39,7 @@ const emit = defineEmits<{
             <small>{{ props.user.role === "admin" ? "不限积分" : `${formatPoints(props.user.credits)} 积分` }}</small>
           </span>
           <button type="button" class="auth-top-button account" @click="emit('openUser')">我的后台</button>
+          <a class="auth-top-button gallery-entry" href="/gallery">灵感广场</a>
           <button v-if="props.user.role === 'admin'" type="button" class="auth-top-button admin" @click="emit('openAdmin')">站长后台</button>
           <button type="button" class="auth-top-button ghost" @click="emit('logout')">退出</button>
         </template>
@@ -46,6 +47,7 @@ const emit = defineEmits<{
         <template v-else>
           <button type="button" class="auth-top-button ghost" @click="emit('login')">登录</button>
           <button type="button" class="auth-top-button primary" @click="emit('register')">注册</button>
+          <a class="auth-top-button gallery-entry" href="/gallery">灵感广场</a>
         </template>
       </template>
 

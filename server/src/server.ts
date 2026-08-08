@@ -102,15 +102,7 @@ export async function startServer():
     process.env
       .AUTH_COOKIE_SECURE ===
     "true";
-
-  const historyRetentionEnabled =
-
-    process.env.HISTORY_RETENTION_ENABLED ===
-
-    "true";
-
-
-  const database =
+const database =
 
     await createAppDatabase();
 
@@ -250,16 +242,11 @@ export async function startServer():
     modelSettingsService.initialize(),
     batchJobService.initialize()
   ]);
-  if (historyRetentionEnabled) {
-    await historyRetentionService.start();
-    console.log(
-      "生成历史自动清理：已开启"
-    );
-  } else {
-    console.log(
-      "生成历史自动清理：已关闭"
-    );
-  }
+  await historyRetentionService.start();
+
+  console.log(
+    "服务器存储策略：已加载（是否执行由站长后台开关控制）"
+  );
 
   const health =
     await healthService.check();
@@ -357,11 +344,7 @@ export async function startServer():
 
     stopReconciliation();
     stopBatchWorker();
-    if (historyRetentionEnabled) {
-
-      historyRetentionService.stop();
-
-    }
+    historyRetentionService.stop();
 
     await closeHttpServer(
       server,

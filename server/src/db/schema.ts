@@ -223,6 +223,92 @@ export const SCHEMA_STATEMENTS = [
     CONSTRAINT fk_app_announcements_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
 
+  `CREATE TABLE IF NOT EXISTS app_gallery_submissions (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    history_id CHAR(36) NOT NULL,
+    image_id CHAR(36) NOT NULL,
+    title VARCHAR(80) NOT NULL,
+    description VARCHAR(500) NULL,
+    show_prompt TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('pending','approved','rejected','withdrawn') NOT NULL DEFAULT 'pending',
+    featured TINYINT(1) NOT NULL DEFAULT 0,
+    rejection_reason VARCHAR(300) NULL,
+    submitted_at DATETIME(3) NOT NULL,
+    reviewed_at DATETIME(3) NULL,
+    reviewed_by_user_id CHAR(36) NULL,
+    updated_at DATETIME(3) NOT NULL,
+    KEY idx_app_gallery_status (status, featured, submitted_at),
+    KEY idx_app_gallery_user (user_id, submitted_at),
+    KEY idx_app_gallery_history (history_id),
+    KEY idx_app_gallery_image (image_id),
+    CONSTRAINT fk_app_gallery_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_gallery_history FOREIGN KEY (history_id) REFERENCES app_history_records(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_gallery_image FOREIGN KEY (image_id) REFERENCES app_history_images(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_gallery_reviewer FOREIGN KEY (reviewed_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_storage_settings (
+    id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+    enforcement_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    base_image_limit INT UNSIGNED NOT NULL DEFAULT 20,
+    base_retention_days INT UNSIGNED NOT NULL DEFAULT 7,
+    grace_days INT UNSIGNED NOT NULL DEFAULT 3,
+    updated_at DATETIME(3) NOT NULL,
+    updated_by_user_id CHAR(36) NULL,
+    CONSTRAINT fk_app_storage_settings_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `INSERT INTO app_storage_settings (
+    id,
+    enforcement_enabled,
+    base_image_limit,
+    base_retention_days,
+    grace_days,
+    updated_at,
+    updated_by_user_id
+  ) VALUES (
+    1, 0, 20, 7, 3,
+    UTC_TIMESTAMP(3),
+    NULL
+  )
+  ON DUPLICATE KEY UPDATE id = id`,
+
+  `CREATE TABLE IF NOT EXISTS app_storage_packages (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL,
+    description VARCHAR(300) NULL,
+    image_limit_bonus INT UNSIGNED NOT NULL DEFAULT 0,
+    retention_days_bonus INT UNSIGNED NOT NULL DEFAULT 0,
+    valid_days INT UNSIGNED NOT NULL,
+    points_cost_cents BIGINT UNSIGNED NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 100,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    updated_by_user_id CHAR(36) NULL,
+    KEY idx_app_storage_packages_enabled (enabled, sort_order),
+    CONSTRAINT fk_app_storage_packages_actor FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_storage_entitlements (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    package_id CHAR(36) NULL,
+    package_name VARCHAR(60) NOT NULL,
+    image_limit_bonus INT UNSIGNED NOT NULL DEFAULT 0,
+    retention_days_bonus INT UNSIGNED NOT NULL DEFAULT 0,
+    points_cost_cents BIGINT UNSIGNED NOT NULL,
+    purchased_at DATETIME(3) NOT NULL,
+    expires_at DATETIME(3) NOT NULL,
+    credit_transaction_id CHAR(36) NULL,
+    KEY idx_app_storage_entitlements_user (user_id, expires_at),
+    KEY idx_app_storage_entitlements_package (package_id),
+    CONSTRAINT fk_app_storage_entitlements_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_storage_entitlements_package FOREIGN KEY (package_id) REFERENCES app_storage_packages(id) ON DELETE SET NULL,
+    CONSTRAINT fk_app_storage_entitlements_transaction FOREIGN KEY (credit_transaction_id) REFERENCES app_credit_transactions(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
   `CREATE TABLE IF NOT EXISTS app_admin_audit_logs (
     id CHAR(36) NOT NULL PRIMARY KEY,
     actor_user_id CHAR(36) NULL,
