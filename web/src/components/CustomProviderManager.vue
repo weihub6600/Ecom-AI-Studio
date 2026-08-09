@@ -34,6 +34,7 @@ interface ApiProvider {
   authHeader: string;
   authScheme: string;
   enabled: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
   models: ProviderModel[];
@@ -65,7 +66,8 @@ const providerForm =
     authHeader:
       "Authorization",
     authScheme:
-      "Bearer"
+      "Bearer",
+    sortOrder: 500
   });
 
 const selectedProviderId =
@@ -159,7 +161,8 @@ async function createProvider() {
         authHeader:
           "Authorization",
         authScheme:
-          "Bearer"
+          "Bearer",
+        sortOrder: 500
       }
     );
 
@@ -210,6 +213,25 @@ async function toggleProvider(
   finally {
     saving.value = "";
   }
+}
+
+async function updateProviderSort(provider: ApiProvider) {
+  const raw = window.prompt(`设置 ${provider.displayName} 的前台排序（数值越小越靠前）`, String(provider.sortOrder || 500));
+  if (raw === null) return;
+  const sortOrder = Number(raw);
+  if (!Number.isInteger(sortOrder) || sortOrder < 1 || sortOrder > 9999) {
+    errorMessage.value = "排序需为 1–9999 的整数";
+    return;
+  }
+  saving.value = provider.id;
+  clearMessages();
+  try {
+    await apiRequest(`/api/admin/api-providers/${encodeURIComponent(provider.id)}`, jsonRequest({ sortOrder }, "PATCH"));
+    successMessage.value = "前台排序已更新";
+    await loadProviders();
+  } catch (error) {
+    errorMessage.value = messageOf(error, "更新服务商排序失败");
+  } finally { saving.value = ""; }
 }
 
 async function replaceApiKey(
@@ -523,7 +545,7 @@ function messageOf(
     <header class="provider-manager-hero">
       <div>
         <span>DYNAMIC PROVIDER REGISTRY</span>
-        <h2>API 服务商与模型</h2>
+        <h2>模型服务商与模型</h2>
         <p>新增 OpenAI Images 兼容的同步 JSON 服务商。API Key 使用 AES-GCM 加密后保存。</p>
       </div>
       <button type="button" @click="loadProviders">刷新</button>
@@ -534,7 +556,7 @@ function messageOf(
 
     <div class="provider-manager-grid">
       <section class="provider-panel">
-        <header><strong>新增 API 服务商</strong><span>第一步</span></header>
+        <header><strong>新增模型服务商</strong><span>第一步</span></header>
         <div class="provider-form-grid">
           <label>服务商标识<input v-model="providerForm.id" placeholder="例如 openai-cn" /></label>
           <label>显示名称<input v-model="providerForm.displayName" placeholder="例如 OpenAI 国内代理" /></label>
@@ -543,6 +565,7 @@ function messageOf(
           <label class="wide">API Key<input v-model="providerForm.apiKey" type="password" autocomplete="new-password" /></label>
           <label>认证 Header<input v-model="providerForm.authHeader" /></label>
           <label>认证前缀<input v-model="providerForm.authScheme" placeholder="Bearer" /></label>
+          <label>前台排序<input v-model.number="providerForm.sortOrder" type="number" min="1" max="9999" title="数值越小越靠前" /></label>
         </div>
         <button class="provider-primary" type="button" :disabled="saving === 'provider'" @click="createProvider">
           {{ saving === 'provider' ? '正在新增…' : '新增服务商' }}
@@ -552,7 +575,7 @@ function messageOf(
       <section class="provider-panel">
         <header><strong>为服务商新增模型</strong><span>第二步</span></header>
         <div class="provider-form-grid">
-          <label class="wide">选择服务商
+          <label class="wide">选择模型服务商
             <select v-model="selectedProviderId">
               <option value="">请选择</option>
               <option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.displayName }}</option>
@@ -574,7 +597,7 @@ function messageOf(
     </div>
 
     <div v-if="loading" class="provider-empty">正在读取服务商…</div>
-    <div v-else-if="providers.length === 0" class="provider-empty">还没有自定义 API 服务商</div>
+    <div v-else-if="providers.length === 0" class="provider-empty">还没有自定义模型服务商</div>
 
     <div v-else class="provider-list">
       <article v-for="provider in providers" :key="provider.id" class="provider-card">
@@ -594,6 +617,7 @@ function messageOf(
 
         <div class="provider-actions">
           <button type="button" @click="toggleProvider(provider)">{{ provider.enabled ? '停用' : '启用' }}</button>
+          <button type="button" @click="updateProviderSort(provider)">排序 {{ provider.sortOrder }}</button>
           <button type="button" @click="replaceApiKey(provider)">更换 API Key</button>
           <button class="danger" type="button" @click="deleteProvider(provider)">删除服务商</button>
         </div>

@@ -21,10 +21,11 @@ import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue"
 import AdminGalleryManager from "./components/AdminGalleryManager.vue";
 import AdminStoragePackageManager from "./components/AdminStoragePackageManager.vue";
 import AdminUserMessagingManager from "./components/AdminUserMessagingManager.vue";
+import AdminFeedbackManager from "./components/AdminFeedbackManager.vue";
 import AdminUserAccountTools from "./components/AdminUserAccountTools.vue";
 import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "audience" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "audience" | "feedback" | "cards" | "models" | "audit" | "providers";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -70,14 +71,15 @@ const auditAction = ref("");
 const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "dashboard", label: "数据总览", hint: "运营与系统状态" },
   { id: "tasks", label: "任务运维", hint: "健康、异常与恢复" },
-  { id: "announcements", label: "公告管理", hint: "首页通知与发布" },
+  { id: "announcements", label: "公告管理", hint: "弹窗与顶部消息" },
   { id: "gallery", label: "灵感广场", hint: "投稿审核与精选" },
   { id: "storage", label: "存储权益", hint: "额度、期限与方案" },
   { id: "users", label: "用户管理", hint: "审核、积分与记录" },
   { id: "audience", label: "用户运营", hint: "分组与站内消息" },
+  { id: "feedback", label: "用户反馈", hint: "建议、问题与回复" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
   { id: "models", label: "模型与价格", hint: "启停和按张计费" },
-  { id: "providers", label: "API 服务商", hint: "新增服务商和模型参数" },
+  { id: "providers", label: "模型服务商", hint: "服务商排序与模型参数" },
   { id: "audit", label: "操作审计", hint: "站长操作追踪" }
 ];
 
@@ -533,6 +535,10 @@ function auditLabel(action: string) {
 
       <section v-else-if="activeSection === 'audience'" class="admin-v10-section">
         <AdminUserMessagingManager />
+      </section>
+
+      <section v-else-if="activeSection === 'feedback'" class="admin-v10-section">
+        <AdminFeedbackManager />
       </section>
 
       <section v-else-if="activeSection === 'cards'" class="admin-v10-section">

@@ -428,11 +428,14 @@ export function createModelSettingsService(
           )
         );
       })
-      .map((item) => ({
-        ...item.capability,
-        creditCost:
-          item.points
-      }));
+      .map((item) => {
+        const provider = getBuiltInProviderRuntimeConfig(item.provider);
+        return {
+          ...item.capability,
+          providerSortOrder: provider?.sortOrder ?? 100,
+          creditCost: item.points
+        };
+      });
   }
 
   function get(

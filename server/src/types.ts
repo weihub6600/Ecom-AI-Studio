@@ -47,6 +47,7 @@ export interface ModelCapability {
   id: string;
   provider: ProviderId;
   providerName: string;
+  providerSortOrder?: number;
   name: string;
   description: string;
   configured: boolean;

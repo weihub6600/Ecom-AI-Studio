@@ -33,6 +33,7 @@ interface ProviderSettingRow
   api_key_ciphertext: string;
   timeout_ms: number;
   enabled: number;
+  sort_order: number;
   options_json:
     string |
     Record<string, unknown>;
@@ -55,6 +56,7 @@ export interface AdminBuiltInProvider {
   statusEndpoint: string;
   timeoutMs: number;
   enabled: boolean;
+  sortOrder: number;
   apiKeyConfigured: boolean;
   apiKeyPreview: string;
   imageSize?: string;
@@ -110,6 +112,8 @@ export function createBuiltInProviderSettingsService(
              NOT NULL DEFAULT 300000,
            enabled TINYINT(1)
              NOT NULL DEFAULT 1,
+           sort_order INT UNSIGNED
+             NOT NULL DEFAULT 100,
            options_json JSON
              NOT NULL,
            updated_by_user_id CHAR(36)
@@ -125,6 +129,19 @@ export function createBuiltInProviderSettingsService(
          DEFAULT CHARSET=utf8mb4
          COLLATE=utf8mb4_unicode_ci`
     );
+
+    const [sortColumns] = await database.pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'app_builtin_provider_settings'
+         AND COLUMN_NAME = 'sort_order'`,
+      [database.databaseName]
+    );
+    if (sortColumns.length === 0) {
+      await database.pool.query(
+        `ALTER TABLE app_builtin_provider_settings
+         ADD COLUMN sort_order INT UNSIGNED NOT NULL DEFAULT 100 AFTER enabled`
+      );
+    }
 
     await database.pool.execute<
       ResultSetHeader
@@ -232,13 +249,7 @@ export function createBuiltInProviderSettingsService(
         `SELECT *
          FROM
            app_builtin_provider_settings
-         ORDER BY
-           FIELD(
-             provider_id,
-             'lingke',
-             'grsai',
-             'nanobanana'
-           )`
+         ORDER BY sort_order ASC, provider_id ASC`
       );
 
     cache.clear();
@@ -282,6 +293,7 @@ export function createBuiltInProviderSettingsService(
           300_000,
         enabled:
           Boolean(row.enabled),
+        sortOrder: Number(row.sort_order) || 100,
         options:
           parseOptions(
             row.options_json
@@ -336,6 +348,7 @@ export function createBuiltInProviderSettingsService(
             300_000,
           enabled:
             Boolean(row.enabled),
+          sortOrder: Number(row.sort_order) || 100,
           apiKeyConfigured:
             Boolean(apiKey),
           apiKeyPreview:
@@ -452,6 +465,10 @@ export function createBuiltInProviderSettingsService(
             input.enabled
           );
 
+    const sortOrder = input.sortOrder === undefined
+      ? Number(current.sort_order) || 100
+      : boundedInteger(input.sortOrder, 1, 9999, "前台排序需为 1–9999");
+
     const clearApiKey =
       input.clearApiKey ===
         undefined
@@ -521,6 +538,7 @@ export function createBuiltInProviderSettingsService(
          api_key_ciphertext = ?,
          timeout_ms = ?,
          enabled = ?,
+         sort_order = ?,
          options_json = ?,
          updated_by_user_id = ?,
          updated_at = ?
@@ -535,6 +553,7 @@ export function createBuiltInProviderSettingsService(
         apiKeyCiphertext,
         timeoutMs,
         enabled ? 1 : 0,
+        sortOrder,
         JSON.stringify(options),
         actorUserId,
         new Date(),

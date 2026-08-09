@@ -12,6 +12,7 @@ export interface BuiltInProviderRuntimeConfig {
   apiKey: string;
   timeoutMs: number;
   enabled: boolean;
+  sortOrder: number;
   options: Record<string, string>;
 }
 

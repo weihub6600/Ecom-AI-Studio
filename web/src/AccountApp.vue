@@ -13,6 +13,7 @@ import WorkLibrary from "./components/WorkLibrary.vue";
 import GallerySubmissionCenter from "./components/GallerySubmissionCenter.vue";
 import StorageRightsPanel from "./components/StorageRightsPanel.vue";
 import AccountMessageCenter from "./components/AccountMessageCenter.vue";
+import FeedbackCenter from "./components/FeedbackCenter.vue";
 import BatchStudio from "./components/BatchStudio.vue";
 import InvitationRewardsPanel from "./components/InvitationRewardsPanel.vue";
 import type {
@@ -31,6 +32,7 @@ type AccountSection =
   | "gallery"
   | "storage"
   | "messages"
+  | "feedback"
   | "profile"
   | "batch"
   | "usage"
@@ -94,6 +96,11 @@ const sections:
       hint: "通知、提醒与运营消息"
     },
     {
+      id: "feedback",
+      label: "用户反馈",
+      hint: "建议、问题与回复记录"
+    },
+    {
       id: "profile",
       label: "账号设置",
       hint: "昵称与密码安全"
@@ -110,7 +117,7 @@ const sections:
     },
     {
       id: "invites",
-      label: "邀请奖励",
+      label: "邀请有礼",
       hint: "邀请链接与奖励记录"
     },
     {
@@ -516,6 +523,10 @@ function creditTitle(
 
       <section v-else-if="activeSection === 'messages'" class="account-content">
         <AccountMessageCenter />
+      </section>
+
+      <section v-else-if="activeSection === 'feedback'" class="account-content">
+        <FeedbackCenter />
       </section>
 
       <section v-else-if="activeSection === 'profile'" class="account-content">

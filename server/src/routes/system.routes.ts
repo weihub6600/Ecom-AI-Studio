@@ -52,12 +52,15 @@ export function createSystemRouter(options: {
   );
 
   router.get("/api/models", (_request, response) => {
-    response.json({
-      models: [
-        ...options.modelSettingsService.listPublicModels(),
-        ...options.customProviderService.listPublicModels()
-      ]
-    });
+    const models = [
+      ...options.modelSettingsService.listPublicModels(),
+      ...options.customProviderService.listPublicModels()
+    ].sort((a, b) =>
+      (a.providerSortOrder ?? 9999) - (b.providerSortOrder ?? 9999) ||
+      a.provider.localeCompare(b.provider) ||
+      a.name.localeCompare(b.name)
+    );
+    response.json({ models });
   });
 
   return router;

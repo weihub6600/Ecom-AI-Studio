@@ -18,6 +18,9 @@ import {
 import {
   createInvitationRewardService
 } from "./services/invitation-rewards.js";
+import {
+  ensureAnnouncementExperienceSchema
+} from "./services/announcements.js";
 // V13.5_INVITATION_REWARD_PATCH_V2
 import {
   createAppDatabase
@@ -105,6 +108,10 @@ export async function startServer():
 const database =
 
     await createAppDatabase();
+
+  await ensureAnnouncementExperienceSchema(
+    database
+  );
 
   const migrationResult =
     await migrateLegacyJsonData(

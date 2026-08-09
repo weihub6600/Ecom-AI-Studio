@@ -39,6 +39,12 @@ import {
   setAudienceUserGroups,
   updateUserGroup
 } from "../services/user-messaging.js";
+import {
+  addAdminFeedbackReply,
+  getAdminFeedbackDetail,
+  listAdminFeedback,
+  updateAdminFeedbackStatus
+} from "../services/feedback.js";
 import { Router, type Request, type RequestHandler } from "express";
 import type { AuthService } from "../auth.js";
 import type { ModelSettingsService } from "../services/model-settings.js";
@@ -126,6 +132,208 @@ export function createAdminRouter(options: {
       return sendAuthError(response, error, "删除公告失败");
     }
   });
+
+  router.get(
+    "/api/admin/feedback",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        return response.json({
+          feedback:
+            await listAdminFeedback(
+              database,
+              {
+                status:
+                  request.query.status,
+                search:
+                  request.query.search,
+                limit:
+                  request.query.limit
+              }
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取用户反馈失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/admin/feedback/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        return response.json({
+          feedback:
+            await getAdminFeedbackDetail(
+              database,
+              id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取反馈详情失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/admin/feedback/:id/replies",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const feedback =
+          await addAdminFeedbackReply(
+            database,
+            actor.id,
+            id,
+            request.body || {}
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "feedback.reply",
+          targetType:
+            "user_feedback",
+          targetId:
+            id,
+          summary:
+            "回复用户反馈：" +
+            feedback.title,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          feedback
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "回复用户反馈失败"
+        );
+      }
+    }
+  );
+
+  router.patch(
+    "/api/admin/feedback/:id",
+    ...protectedAdmin,
+    async (request, response) => {
+      try {
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        const actor =
+          getAuthenticatedUser(
+            request
+          );
+
+        const feedback =
+          await updateAdminFeedbackStatus(
+            database,
+            id,
+            request.body || {}
+          );
+
+        await auditLogService.safeRecord({
+          actor,
+          action:
+            "feedback.status.update",
+          targetType:
+            "user_feedback",
+          targetId:
+            id,
+          summary:
+            "更新反馈状态：" +
+            feedback.title,
+          context:
+            auditContext(
+              request
+            )
+        });
+
+        return response.json({
+          success: true,
+          feedback
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "更新反馈状态失败"
+        );
+      }
+    }
+  );
 
   router.get(
     "/api/admin/audience/groups",

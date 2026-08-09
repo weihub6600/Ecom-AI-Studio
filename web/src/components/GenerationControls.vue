@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { AuthUser, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
-import { displayProviderText, formatBytes, formatPoints, providerDisplayName } from "../utils/format";
+import { displayProviderText, formatBytes, formatPoints } from "../utils/format";
 
 interface ProviderOption { id: ProviderId; name: string }
 interface SizeOption { value: OutputSize; title: string }
@@ -200,14 +200,14 @@ async function useCustomPrompt() {
         <span class="step-number">01</span>
         <div>
           <h2>创作设置</h2>
-          <p>选择 API 服务商、模型并描述需要生成的画面</p>
+          <p>选择模型服务商、模型并描述需要生成的画面</p>
         </div>
       </div>
       <span class="operation-pill">{{ props.operationLabel }}</span>
     </div>
 
     <div class="field-block provider-field">
-      <label>API 服务商</label>
+      <label>模型服务商</label>
       <div class="segmented provider-segmented">
         <button
           v-for="provider in props.providers"
@@ -244,10 +244,7 @@ async function useCustomPrompt() {
         >
           <div class="provider-symbol">{{ props.providerSymbol }}</div>
           <div class="model-copy">
-            <strong>
-              {{ providerDisplayName(props.selectedModel.provider, props.selectedModel.providerName) }}
-              · {{ props.selectedModel.name }}
-            </strong>
+            <strong>{{ props.selectedModel.name }}</strong>
             <span>{{ displayProviderText(props.selectedModel.description) }}</span>
           </div>
           <span class="model-selected-check" aria-hidden="true">✓</span>

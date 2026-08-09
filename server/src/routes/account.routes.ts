@@ -42,6 +42,13 @@ import {
   markUserMessageRead
 } from "../services/user-messaging.js";
 import {
+  addUserFeedbackReply,
+  closeUserFeedback,
+  createUserFeedback,
+  getUserFeedbackDetail,
+  listUserFeedback
+} from "../services/feedback.js";
+import {
   getAuthenticatedUser
 } from "../middleware/auth.js";
 import {
@@ -863,6 +870,207 @@ export function createAccountRouter(
           response,
           error,
           "兑换存储权益失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/feedback",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        return response.json({
+          feedback:
+            await listUserFeedback(
+              database,
+              user.id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取反馈记录失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/feedback",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const feedback =
+          await createUserFeedback(
+            database,
+            user.id,
+            request.body || {}
+          );
+
+        return response
+          .status(201)
+          .json({
+            success: true,
+            feedback
+          });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "提交反馈失败"
+        );
+      }
+    }
+  );
+
+  router.get(
+    "/api/account/feedback/:id",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        return response.json({
+          feedback:
+            await getUserFeedbackDetail(
+              database,
+              user.id,
+              id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "读取反馈详情失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/feedback/:id/replies",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        return response.json({
+          success: true,
+          feedback:
+            await addUserFeedbackReply(
+              database,
+              user.id,
+              id,
+              request.body || {}
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "补充反馈失败"
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/api/account/feedback/:id/close",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user =
+          getAuthenticatedUser(
+            request
+          );
+
+        const id =
+          readRouteParam(
+            request.params.id
+          );
+
+        if (!id) {
+          return response
+            .status(400)
+            .json({
+              error: {
+                code:
+                  "INVALID_FEEDBACK_ID",
+                message:
+                  "缺少反馈标识"
+              }
+            });
+        }
+
+        return response.json({
+          success: true,
+          feedback:
+            await closeUserFeedback(
+              database,
+              user.id,
+              id
+            )
+        });
+      } catch (error) {
+        return sendAuthError(
+          response,
+          error,
+          "关闭反馈失败"
         );
       }
     }

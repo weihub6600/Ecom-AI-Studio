@@ -212,6 +212,12 @@ export const SCHEMA_STATEMENTS = [
     title VARCHAR(80) NOT NULL,
     content VARCHAR(1200) NOT NULL,
     kind ENUM('info','warning','success') NOT NULL DEFAULT 'info',
+    display_mode ENUM('topbar','popup') NOT NULL DEFAULT 'topbar',
+    icon VARCHAR(40) NOT NULL DEFAULT 'megaphone',
+    motion ENUM('none','shimmer','pulse','gradient') NOT NULL DEFAULT 'none',
+    link_url VARCHAR(800) NULL,
+    link_text VARCHAR(40) NULL,
+    countdown_enabled TINYINT(1) NOT NULL DEFAULT 0,
     pinned TINYINT(1) NOT NULL DEFAULT 0,
     published TINYINT(1) NOT NULL DEFAULT 0,
     starts_at DATETIME(3) NULL,
@@ -380,6 +386,34 @@ export const SCHEMA_STATEMENTS = [
     KEY idx_app_audit_actor_created (actor_user_id, created_at),
     KEY idx_app_audit_action_created (action, created_at),
     CONSTRAINT fk_app_audit_actor FOREIGN KEY (actor_user_id) REFERENCES app_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_user_feedback (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    type ENUM('suggestion','bug','question','other') NOT NULL DEFAULT 'suggestion',
+    title VARCHAR(80) NOT NULL,
+    content TEXT NOT NULL,
+    status ENUM('open','processing','replied','closed') NOT NULL DEFAULT 'open',
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    last_replied_at DATETIME(3) NULL,
+    KEY idx_app_feedback_user_updated (user_id, updated_at),
+    KEY idx_app_feedback_status_updated (status, updated_at),
+    CONSTRAINT fk_app_feedback_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+
+  `CREATE TABLE IF NOT EXISTS app_user_feedback_replies (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    feedback_id CHAR(36) NOT NULL,
+    author_user_id CHAR(36) NULL,
+    author_role ENUM('user','admin') NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    KEY idx_app_feedback_replies_feedback (feedback_id, created_at),
+    KEY idx_app_feedback_replies_author (author_user_id),
+    CONSTRAINT fk_app_feedback_reply_feedback FOREIGN KEY (feedback_id) REFERENCES app_user_feedback(id) ON DELETE CASCADE,
+    CONSTRAINT fk_app_feedback_reply_author FOREIGN KEY (author_user_id) REFERENCES app_users(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
 
 ] as const;

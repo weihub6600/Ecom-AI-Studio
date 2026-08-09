@@ -69,6 +69,21 @@ const userSearch =
 const userStatus =
   ref("");
 
+const targetGroupSearch = ref("");
+const targetUserSearch = ref("");
+const targetUsers = ref<AdminAudienceUser[]>([]);
+const targetUserLoading = ref(false);
+
+const targetGroupOpen =
+  ref(false);
+
+const targetUserOpen =
+  ref(false);
+
+let targetUserSearchTimer:
+  ReturnType<typeof setTimeout> |
+  undefined;
+
 const activeGroupFilter =
   ref("all");
 
@@ -109,6 +124,12 @@ const messageDraft =
     targetGroupId: "",
     targetUserId: ""
   });
+
+const targetGroups = computed(() => {
+  const keyword = targetGroupSearch.value.trim().toLowerCase();
+  if (!keyword) return groups.value;
+  return groups.value.filter((item) => (item.name + " " + (item.description || "")).toLowerCase().includes(keyword));
+});
 
 const filteredUsers =
   computed(() => {
@@ -754,6 +775,102 @@ function targetLabel(
   );
 }
 
+async function searchTargetUsers() {
+  targetUserLoading.value = true;
+  try {
+    const params = new URLSearchParams({ page: "1", pageSize: "50", status: "active" });
+    if (targetUserSearch.value.trim()) params.set("search", targetUserSearch.value.trim());
+    const data = await apiRequest<{ users: AdminAudienceUser[] }>(`/api/admin/audience/users?${params.toString()}`);
+    targetUsers.value = data.users || [];
+  } catch (error) {
+    errorMessage.value = messageOf(error, "搜索目标用户失败");
+  } finally { targetUserLoading.value = false; }
+}
+
+function chooseTargetGroup(
+  group: UserGroup
+) {
+  messageDraft.targetGroupId =
+    group.id;
+
+  targetGroupSearch.value =
+    group.name;
+
+  targetGroupOpen.value =
+    false;
+}
+
+function chooseTargetUser(
+  user: AdminAudienceUser
+) {
+  messageDraft.targetUserId =
+    user.id;
+
+  targetUserSearch.value =
+    user.nickname
+      ? `${user.nickname} · @${user.username}`
+      : `@${user.username}`;
+
+  targetUserOpen.value =
+    false;
+}
+
+function openTargetGroupCombo() {
+  targetGroupOpen.value = true;
+}
+
+function openTargetUserCombo() {
+  targetUserOpen.value = true;
+
+  if (
+    targetUsers.value.length === 0
+  ) {
+    void searchTargetUsers();
+  }
+}
+
+function scheduleTargetGroupFilter() {
+  messageDraft.targetGroupId = "";
+  targetGroupOpen.value = true;
+}
+
+function scheduleTargetUserSearch() {
+  messageDraft.targetUserId = "";
+  targetUserOpen.value = true;
+
+  if (targetUserSearchTimer) {
+    clearTimeout(
+      targetUserSearchTimer
+    );
+  }
+
+  targetUserSearchTimer =
+    setTimeout(
+      () => {
+        void searchTargetUsers();
+      },
+      260
+    );
+}
+
+function closeTargetGroupCombo() {
+  window.setTimeout(
+    () => {
+      targetGroupOpen.value = false;
+    },
+    120
+  );
+}
+
+function closeTargetUserCombo() {
+  window.setTimeout(
+    () => {
+      targetUserOpen.value = false;
+    },
+    120
+  );
+}
+
 function chooseTargetType(
   targetType:
     "all" |
@@ -768,6 +885,9 @@ function chooseTargetType(
 
   messageDraft.targetUserId =
     "";
+  targetGroupSearch.value = "";
+  targetUserSearch.value = "";
+  if (targetType === "user") void searchTargetUsers();
 }
 
 async function sendMessage() {
@@ -1145,7 +1265,7 @@ function messageOf(
           </button>
 
           <article
-            v-for="group in groups"
+            v-for="group in targetGroups"
             :key="group.id"
             class="segment-card"
             :class="{
@@ -1700,27 +1820,91 @@ function messageOf(
             "
             class="target-select-card"
           >
-            <label>
+                        <label class="target-combo-field">
               <span>目标分组</span>
-              <select
-                v-model="
-                  messageDraft
-                    .targetGroupId
-                "
-              >
-                <option value="">
-                  请选择用户分组
-                </option>
 
-                <option
-                  v-for="group in groups"
-                  :key="group.id"
-                  :value="group.id"
+              <div
+                class="target-combobox"
+                :class="{
+                  open:
+                    targetGroupOpen
+                }"
+              >
+                <input
+                  v-model="targetGroupSearch"
+                  type="search"
+                  placeholder="搜索并选择分组"
+                  autocomplete="off"
+                  @focus="openTargetGroupCombo"
+                  @input="scheduleTargetGroupFilter"
+                  @blur="closeTargetGroupCombo"
+                />
+
+                <button
+                  type="button"
+                  class="target-combobox-toggle"
+                  aria-label="展开分组"
+                  @mousedown.prevent
+                  @click="
+                    targetGroupOpen =
+                      !targetGroupOpen
+                  "
                 >
-                  {{ group.name }}
-                  · {{ group.memberCount }} 人
-                </option>
-              </select>
+                  <span>⌄</span>
+                </button>
+
+                <div
+                  v-if="targetGroupOpen"
+                  class="target-combobox-menu"
+                >
+                  <button
+                    v-for="group in targetGroups"
+                    :key="group.id"
+                    type="button"
+                    :class="{
+                      selected:
+                        messageDraft
+                          .targetGroupId ===
+                        group.id
+                    }"
+                    @mousedown.prevent
+                    @click="
+                      chooseTargetGroup(
+                        group
+                      )
+                    "
+                  >
+                    <span class="target-combo-main">
+                      <strong>
+                        {{ group.name }}
+                      </strong>
+                      <small>
+                        {{ group.memberCount }} 人
+                        <template
+                          v-if="
+                            group.description
+                          "
+                        >
+                          ·
+                          {{
+                            group.description
+                          }}
+                        </template>
+                      </small>
+                    </span>
+                  </button>
+
+                  <div
+                    v-if="
+                      targetGroups.length ===
+                      0
+                    "
+                    class="target-combobox-empty"
+                  >
+                    没有匹配的分组
+                  </div>
+                </div>
+              </div>
             </label>
           </div>
 
@@ -1731,30 +1915,108 @@ function messageOf(
             "
             class="target-select-card"
           >
-            <label>
+                        <label class="target-combo-field">
               <span>目标用户</span>
-              <select
-                v-model="
-                  messageDraft
-                    .targetUserId
-                "
-              >
-                <option value="">
-                  请选择已启用用户
-                </option>
 
-                <option
-                  v-for="user in users.filter(item => item.status === 'active')"
-                  :key="user.id"
-                  :value="user.id"
+              <div
+                class="target-combobox"
+                :class="{
+                  open:
+                    targetUserOpen
+                }"
+              >
+                <input
+                  v-model="targetUserSearch"
+                  type="search"
+                  placeholder="搜索用户名或昵称并选择"
+                  autocomplete="off"
+                  @focus="openTargetUserCombo"
+                  @input="scheduleTargetUserSearch"
+                  @keyup.enter="
+                    searchTargetUsers
+                  "
+                  @blur="closeTargetUserCombo"
+                />
+
+                <button
+                  type="button"
+                  class="target-combobox-toggle"
+                  aria-label="展开用户"
+                  @mousedown.prevent
+                  @click="
+                    targetUserOpen =
+                      !targetUserOpen
+                  "
                 >
-                  {{
-                    user.nickname ||
-                    user.username
-                  }}
-                  · {{ user.username }}
-                </option>
-              </select>
+                  <span>⌄</span>
+                </button>
+
+                <div
+                  v-if="targetUserOpen"
+                  class="target-combobox-menu"
+                >
+                  <div
+                    v-if="
+                      targetUserLoading
+                    "
+                    class="target-combobox-empty"
+                  >
+                    正在搜索用户…
+                  </div>
+
+                  <template v-else>
+                    <button
+                      v-for="user in targetUsers"
+                      :key="user.id"
+                      type="button"
+                      :class="{
+                        selected:
+                          messageDraft
+                            .targetUserId ===
+                          user.id
+                      }"
+                      @mousedown.prevent
+                      @click="
+                        chooseTargetUser(
+                          user
+                        )
+                      "
+                    >
+                      <i class="target-combo-avatar">
+                        {{
+                          (
+                            user.nickname ||
+                            user.username
+                          )
+                            .slice(0, 1)
+                        }}
+                      </i>
+
+                      <span class="target-combo-main">
+                        <strong>
+                          {{
+                            user.nickname ||
+                            user.username
+                          }}
+                        </strong>
+                        <small>
+                          @{{ user.username }}
+                        </small>
+                      </span>
+                    </button>
+
+                    <div
+                      v-if="
+                        targetUsers.length ===
+                        0
+                      "
+                      class="target-combobox-empty"
+                    >
+                      没有匹配的用户
+                    </div>
+                  </template>
+                </div>
+              </div>
             </label>
 
             <small>

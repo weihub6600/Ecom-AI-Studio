@@ -38,6 +38,7 @@ interface ProviderRow extends RowDataPacket {
   auth_header: string;
   auth_scheme: string;
   enabled: number;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +72,7 @@ export interface AdminApiProvider {
   authHeader: string;
   authScheme: string;
   enabled: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
   models: AdminApiProviderModel[];
@@ -134,12 +136,26 @@ export function createCustomProviderService(
         auth_header VARCHAR(80) NOT NULL DEFAULT 'Authorization',
         auth_scheme VARCHAR(40) NOT NULL DEFAULT 'Bearer',
         enabled TINYINT(1) NOT NULL DEFAULT 1,
+        sort_order INT UNSIGNED NOT NULL DEFAULT 500,
         created_by_user_id CHAR(36) NULL,
         created_at DATETIME(3) NOT NULL,
         updated_at DATETIME(3) NOT NULL,
         KEY idx_app_api_provider_enabled (enabled, updated_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=${collation}`
     );
+
+    const [providerSortColumns] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'app_api_providers'
+         AND COLUMN_NAME = 'sort_order'`,
+      [database.databaseName]
+    );
+    if (providerSortColumns.length === 0) {
+      await pool.query(
+        `ALTER TABLE app_api_providers
+         ADD COLUMN sort_order INT UNSIGNED NOT NULL DEFAULT 500 AFTER enabled`
+      );
+    }
 
     await pool.query(
       `CREATE TABLE IF NOT EXISTS app_api_provider_models (
@@ -185,7 +201,7 @@ export function createCustomProviderService(
         pool.query<ProviderRow[]>(
           `SELECT *
            FROM app_api_providers
-           ORDER BY created_at ASC`
+           ORDER BY sort_order ASC, created_at ASC`
         ),
         pool.query<ModelRow[]>(
           `SELECT *
@@ -225,6 +241,7 @@ export function createCustomProviderService(
             row.provider_id,
           providerName:
             provider.display_name,
+          providerSortOrder: Number(provider.sort_order) || 500,
           name:
             row.display_name,
           description:
@@ -417,6 +434,7 @@ export function createCustomProviderService(
             row.auth_scheme,
           enabled:
             Boolean(row.enabled),
+          sortOrder: Number(row.sort_order) || 500,
           createdAt:
             toIso(
               row.created_at
@@ -464,6 +482,10 @@ export function createCustomProviderService(
         120,
         "请输入服务商名称"
       );
+
+    const sortOrder = input.sortOrder === undefined
+      ? 500
+      : boundedInteger(input.sortOrder, 1, 9999, 500, "前台排序需为 1–9999");
 
     const baseUrl =
       normalizeBaseUrl(
@@ -513,13 +535,14 @@ export function createCustomProviderService(
           auth_header,
           auth_scheme,
           enabled,
+          sort_order,
           created_by_user_id,
           created_at,
           updated_at
         ) VALUES (
           ?, ?, ?, ?,
           'openai-images-json',
-          ?, ?, ?, 1, ?, ?, ?
+          ?, ?, ?, 1, ?, ?, ?, ?
         )`,
         [
           id,
@@ -529,6 +552,7 @@ export function createCustomProviderService(
           encryptSecret(apiKey),
           authHeader,
           authScheme,
+          sortOrder,
           actorUserId,
           now,
           now
@@ -653,6 +677,10 @@ export function createCustomProviderService(
             input.enabled
           );
 
+    const sortOrder = input.sortOrder === undefined
+      ? Number(current.sort_order) || 500
+      : boundedInteger(input.sortOrder, 1, 9999, 500, "前台排序需为 1–9999");
+
     const apiKey =
       optionalText(
         input.apiKey,
@@ -674,6 +702,7 @@ export function createCustomProviderService(
          auth_header = ?,
          auth_scheme = ?,
          enabled = ?,
+         sort_order = ?,
          updated_at = ?
        WHERE id = ?`,
       [
@@ -687,6 +716,7 @@ export function createCustomProviderService(
         authHeader,
         authScheme,
         enabled ? 1 : 0,
+        sortOrder,
         new Date(),
         providerId
       ]

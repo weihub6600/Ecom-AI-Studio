@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import UserPanel from "./UserPanel.vue";
 import AnnouncementBar from "./components/AnnouncementBar.vue";
 import AppHeader from "./components/AppHeader.vue";
+import HomeFloatingActions from "./components/HomeFloatingActions.vue";
 import IntroSection from "./components/IntroSection.vue";
 import AuthDialog from "./components/AuthDialog.vue";
 import GenerationControls from "./components/GenerationControls.vue";
@@ -100,14 +101,20 @@ const lightboxIndex = ref<number | null>(null);
 const favorites = ref<Set<string>>(new Set(loadFavorites()));
 
 const providers = computed(() => {
-  const unique = new Map<ProviderId, string>();
-  for (const model of models.value) unique.set(model.provider, providerDisplayName(model.provider, model.providerName));
-  const providerOrder: ProviderId[] = ["grsai", "nanobanana", "lingke"];
-  return Array.from(unique, ([id, name]) => ({ id, name })).sort((a, b) => {
-    const aIndex = providerOrder.indexOf(a.id);
-    const bIndex = providerOrder.indexOf(b.id);
-    return (aIndex === -1 ? providerOrder.length : aIndex) - (bIndex === -1 ? providerOrder.length : bIndex);
-  });
+  const unique = new Map<ProviderId, { name: string; sortOrder: number }>();
+  for (const model of models.value) {
+    const sortOrder = model.providerSortOrder ?? 9999;
+    const current = unique.get(model.provider);
+    if (!current || sortOrder < current.sortOrder) {
+      unique.set(model.provider, {
+        name: providerDisplayName(model.provider, model.providerName),
+        sortOrder
+      });
+    }
+  }
+  return Array.from(unique, ([id, item]) => ({ id, ...item }))
+    .sort((x, y) => x.sortOrder - y.sortOrder || x.name.localeCompare(y.name))
+    .map(({ id, name }) => ({ id, name }));
 });
 const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
 const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
@@ -1557,13 +1564,15 @@ async function downloadAllZip() {
           />
           <a
             class="history-more-link"
-            href="/account?tab=history"
+            href="/account?tab=library"
           >
-            查看全部生成历史
+            进入作品库
           </a>
         </div>
       </div>
     </main>
+
+    <HomeFloatingActions />
 
     <AuthDialog v-if="authDialogOpen" v-model:mode="authMode" @close="authDialogOpen = false" @authenticated="handleAuthenticated" />
     <UserPanel v-if="userPanelOpen && authUser" :user="authUser" @close="userPanelOpen = false" @balance-updated="handleBalanceUpdated" />

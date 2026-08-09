@@ -25,6 +25,7 @@ interface BuiltInProvider {
   statusEndpoint: string;
   timeoutMs: number;
   enabled: boolean;
+  sortOrder: number;
   apiKeyConfigured: boolean;
   apiKeyPreview: string;
   imageSize?: string;
@@ -65,6 +66,7 @@ interface ProviderDraft {
   statusEndpoint: string;
   timeoutMs: number;
   enabled: boolean;
+  sortOrder: number;
   apiKey: string;
   clearApiKey: boolean;
   imageSize: string;
@@ -231,6 +233,7 @@ function syncDrafts() {
         provider.timeoutMs,
       enabled:
         provider.enabled,
+      sortOrder: provider.sortOrder || 100,
       apiKey: "",
       clearApiKey: false,
       imageSize:
@@ -362,6 +365,7 @@ async function saveProvider(
             ),
           enabled:
             draft.enabled,
+          sortOrder: Number(draft.sortOrder),
           apiKey:
             draft.apiKey.trim() ||
             undefined,
@@ -619,6 +623,11 @@ function messageOf(
               min="1000"
               max="900000"
             />
+          </label>
+
+          <label>
+            前台排序
+            <input v-model.number="draft.sortOrder" type="number" min="1" max="9999" title="数值越小越靠前" />
           </label>
 
           <label
