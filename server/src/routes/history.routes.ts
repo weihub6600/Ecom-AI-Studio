@@ -41,6 +41,30 @@ export function createHistoryRouter(options: {
   });
 
   router.get(
+    "/api/history/export-manifest",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user = getAuthenticatedUser(request);
+        const history = await historyService.listAll(user.id);
+
+        return response.json({
+          history,
+          total: history.length
+        });
+      } catch (error) {
+        console.error("History export manifest error", error);
+        return response.status(500).json({
+          error: {
+            code: "HISTORY_EXPORT_MANIFEST_ERROR",
+            message: "读取导出数据失败"
+          }
+        });
+      }
+    }
+  );
+
+  router.get(
     "/api/history/:id",
     requireAuth,
     async (request, response) => {

@@ -14,7 +14,6 @@ import GallerySubmissionCenter from "./components/GallerySubmissionCenter.vue";
 import StorageRightsPanel from "./components/StorageRightsPanel.vue";
 import AccountMessageCenter from "./components/AccountMessageCenter.vue";
 import BatchStudio from "./components/BatchStudio.vue";
-import AccountHistory from "./components/AccountHistory.vue";
 import InvitationRewardsPanel from "./components/InvitationRewardsPanel.vue";
 import type {
   AuthUser,
@@ -33,7 +32,6 @@ type AccountSection =
   | "storage"
   | "messages"
   | "profile"
-  | "history"
   | "batch"
   | "usage"
   | "invites"
@@ -101,19 +99,14 @@ const sections:
       hint: "昵称与密码安全"
     },
     {
-      id: "history",
-      label: "生成历史",
-      hint: "查看全部生成记录"
-    },
-    {
       id: "batch",
       label: "批量工作台",
       hint: "模板与服务端批次"
     },
     {
       id: "usage",
-      label: "使用记录",
-      hint: "调用结果与模型"
+      label: "使用明细",
+      hint: "模型调用与积分流水"
     },
     {
       id: "invites",
@@ -328,6 +321,37 @@ function readInitialSection():
     : "library";
 }
 
+function displayUsageModel(
+  record: UsageRecord
+): string {
+  let model =
+    String(
+      record.model || ""
+    ).trim();
+
+  const provider =
+    String(
+      record.provider || ""
+    ).trim();
+
+  if (
+    provider &&
+    model
+      .toLowerCase()
+      .startsWith(
+        provider.toLowerCase() +
+          "-"
+      )
+  ) {
+    model =
+      model.slice(
+        provider.length + 1
+      );
+  }
+
+  return model || "AI 模型";
+}
+
 function usageLabel(
   status:
     UsageRecord["status"]
@@ -425,10 +449,17 @@ function creditTitle(
 
       <nav>
         <button
-          v-for="item in sections"
+          v-for="item in sections.filter(item => item.id !== 'credits')"
           :key="item.id"
           type="button"
-          :class="{ active: activeSection === item.id }"
+          :class="{
+            active:
+              activeSection === item.id ||
+              (
+                item.id === 'usage' &&
+                activeSection === 'credits'
+              )
+          }"
           @click="changeSection(item.id)"
         >
           <span>{{ item.label.slice(0, 1) }}</span>
@@ -450,7 +481,14 @@ function creditTitle(
       <header class="account-topbar">
         <div>
           <span>V13.5 · ACCOUNT CENTER</span>
-          <h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1>
+          <h1>{{
+            activeSection === "credits"
+              ? "使用明细"
+              : sections.find(
+                  item =>
+                    item.id === activeSection
+                )?.label
+          }}</h1>
         </div>
 
         <div class="account-balance">
@@ -484,10 +522,6 @@ function creditTitle(
         <AccountProfileSecurity :user="user" @user-updated="handleProfileUpdated" />
       </section>
 
-      <section v-else-if="activeSection === 'history'" class="account-content">
-        <AccountHistory />
-      </section>
-
       <section v-else-if="activeSection === 'batch'" class="account-content">
         <BatchStudio
           :user="user"
@@ -500,6 +534,24 @@ function creditTitle(
       </section>
 
       <section v-else-if="activeSection === 'usage'" class="account-content">
+
+        <div class="account-record-tabs">
+          <button
+            type="button"
+            :class="{ active: true }"
+            @click="changeSection('usage')"
+          >
+            使用记录
+          </button>
+          <button
+            type="button"
+            :class="{ active: false }"
+            @click="changeSection('credits')"
+          >
+            积分明细
+          </button>
+        </div>
+
         <header class="account-section-heading">
           <div>
             <span>API USAGE</span>
@@ -522,7 +574,7 @@ function creditTitle(
             <tbody>
               <tr v-for="record in usage" :key="record.id">
                 <td>{{ formatDate(record.createdAt) }}</td>
-                <td>{{ record.model }}</td>
+                <td>{{ displayUsageModel(record) }}</td>
                 <td><i :class="record.status">{{ usageLabel(record.status) }}</i></td>
                 <td>{{ record.imageCount }}</td>
                 <td>{{ formatPoints(record.pointsCost || 0) }}</td>
@@ -534,6 +586,24 @@ function creditTitle(
       </section>
 
       <section v-else class="account-content">
+
+        <div class="account-record-tabs">
+          <button
+            type="button"
+            :class="{ active: false }"
+            @click="changeSection('usage')"
+          >
+            使用记录
+          </button>
+          <button
+            type="button"
+            :class="{ active: true }"
+            @click="changeSection('credits')"
+          >
+            积分明细
+          </button>
+        </div>
+
         <header class="account-section-heading">
           <div>
             <span>CREDIT LEDGER</span>

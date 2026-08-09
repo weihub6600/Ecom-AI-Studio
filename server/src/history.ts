@@ -165,6 +165,38 @@ export function createHistoryService(options: HistoryServiceOptions) {
     return groupHistoryRows(rows);
   }
 
+  async function listAll(
+    clientId: string
+  ): Promise<StoredHistoryRecord[]> {
+    const [rows] =
+      await pool.query<RowDataPacket[]>(
+        `SELECT
+           h.*,
+           i.id AS image_id,
+           i.position_index,
+           i.file_name,
+           i.image_url,
+           i.width AS image_width,
+           i.height AS image_height,
+           i.mime_type
+         FROM app_history_records h
+         LEFT JOIN app_history_images i
+           ON i.history_id = h.id
+         WHERE
+           h.deleted_at IS NULL
+           AND (
+             h.owner_user_id = ?
+             OR h.client_id = ?
+           )
+         ORDER BY
+           h.created_at DESC,
+           i.position_index ASC`,
+        [clientId, clientId]
+      );
+
+    return groupHistoryRows(rows);
+  }
+
   async function getById(
     id: string,
     clientId?: string
@@ -426,6 +458,7 @@ export function createHistoryService(options: HistoryServiceOptions) {
     generatedDir,
     initialize,
     list,
+    listAll,
     getById,
     getByGenerationTaskId,
     save,

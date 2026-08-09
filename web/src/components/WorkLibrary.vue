@@ -76,6 +76,46 @@ interface LibraryPagination {
   totalPages: number;
 }
 
+interface UnifiedExportSource {
+  id: string;
+  createdAt: string;
+  provider: string;
+  model: string;
+  prompt: string;
+  operation: "text-to-image" | "image-edit";
+  size: string;
+  durationMs?: number;
+  cost?: number;
+  images: Array<{
+    url: string;
+    width?: number;
+    height?: number;
+    mimeType?: string;
+  }>;
+}
+
+type UnifiedExportScope =
+  | "single"
+  | "selected"
+  | "all";
+
+interface UnifiedExportRecord {
+  id: string;
+  createdAt: string;
+  model: string;
+  prompt: string;
+  operation: "text-to-image" | "image-edit";
+  size: string;
+  durationMs?: number;
+  cost?: number;
+  images: Array<{
+    file: string;
+    width?: number;
+    height?: number;
+    mimeType?: string;
+  }>;
+}
+
 const props = defineProps<{
   userId: string
 }>();
@@ -118,6 +158,11 @@ const loading = ref(false);
 const actionLoading = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
+const exportProgress = ref(0);
+const exportStatus = ref("");
+const exportError = ref("");
+const exporting = ref(false);
+const exportedName = ref("");
 const detailItem = ref<LibraryItem | null>(
   null
 );
@@ -762,6 +807,691 @@ async function runAction(
   }
 }
 
+async function exportSingleWork(
+  item: LibraryItem
+) {
+  await exportWorks(
+    [item],
+    "single"
+  );
+}
+
+async function exportSelectedWorks() {
+  const selected =
+    items.value.filter(
+      (item) =>
+        selectedIds.value.has(
+          item.id
+        )
+    );
+
+  if (!selected.length) {
+    errorMessage.value =
+      "请先选择要导出的作品";
+    return;
+  }
+
+  await exportWorks(
+    selected,
+    "selected"
+  );
+}
+
+async function exportAllWorks() {
+  if (exporting.value) return;
+
+  exporting.value = true;
+  exportProgress.value = 0;
+  exportStatus.value =
+    "正在读取账号全部作品…";
+  exportError.value = "";
+  exportedName.value = "";
+
+  try {
+    const data =
+      await apiRequest<{
+        history:
+          UnifiedExportSource[];
+        total: number;
+      }>(
+        "/api/history/export-manifest"
+      );
+
+    if (!data.history?.length) {
+      exportStatus.value =
+        "暂无可导出的作品";
+      return;
+    }
+
+    await buildWorksZip(
+      data.history,
+      "all"
+    );
+  } catch (error) {
+    exportError.value =
+      error instanceof Error
+        ? error.message
+        : "导出全部作品失败";
+    exportStatus.value =
+      "导出失败";
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function exportWorks(
+  sources:
+    UnifiedExportSource[],
+  scope:
+    UnifiedExportScope
+) {
+  if (
+    exporting.value ||
+    !sources.length
+  ) {
+    return;
+  }
+
+  exporting.value = true;
+  exportProgress.value = 0;
+  exportStatus.value =
+    "正在准备导出文件…";
+  exportError.value = "";
+  exportedName.value = "";
+
+  try {
+    await buildWorksZip(
+      sources,
+      scope
+    );
+  } catch (error) {
+    exportError.value =
+      error instanceof Error
+        ? error.message
+        : "导出作品失败";
+    exportStatus.value =
+      "导出失败";
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function buildWorksZip(
+  sources:
+    UnifiedExportSource[],
+  scope:
+    UnifiedExportScope
+) {
+  const { default: JSZip } =
+    await import("jszip");
+
+  const zip =
+    new JSZip();
+
+  const exported:
+    UnifiedExportRecord[] = [];
+
+  const failures:
+    string[] = [];
+
+  const totalImages =
+    sources.reduce(
+      (
+        total,
+        source
+      ) =>
+        total +
+        source.images.length,
+      0
+    );
+
+  let handledImages = 0;
+
+  for (const source of sources) {
+    const images:
+      UnifiedExportRecord["images"] =
+        [];
+
+    for (
+      let imageIndex = 0;
+      imageIndex <
+        source.images.length;
+      imageIndex += 1
+    ) {
+      const image =
+        source.images[
+          imageIndex
+        ];
+
+      if (!image) continue;
+
+      const extension =
+        workImageExtension(
+          image.mimeType,
+          image.url
+        );
+
+      const file =
+        `图片/${String(handledImages + 1).padStart(3, "0")}_${workExportTime(source.createdAt)}_${safeWorkFileSegment(workExportModel(source), "AI模型", 30)}.${extension}`;
+
+      exportStatus.value =
+        `正在下载图片 ${handledImages + 1} / ${Math.max(totalImages, 1)}`;
+
+      try {
+        const response =
+          await fetch(
+            image.url,
+            {
+              credentials:
+                "same-origin"
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
+          );
+        }
+
+        const blob =
+          await response.blob();
+
+        zip.file(
+          file,
+          blob
+        );
+
+        images.push({
+          file,
+          width:
+            image.width,
+          height:
+            image.height,
+          mimeType:
+            image.mimeType ||
+            blob.type ||
+            undefined
+        });
+      } catch (error) {
+        failures.push(
+          [
+            source.id,
+            image.url,
+            error instanceof Error
+              ? error.message
+              : "图片下载失败"
+          ].join("\t")
+        );
+      } finally {
+        handledImages += 1;
+
+        exportProgress.value =
+          totalImages > 0
+            ? Math.min(
+                82,
+                Math.round(
+                  (
+                    handledImages /
+                    totalImages
+                  ) * 82
+                )
+              )
+            : 82;
+      }
+    }
+
+    exported.push({
+      id:
+        source.id,
+      createdAt:
+        source.createdAt,
+      model:
+        workExportModel(
+          source
+        ),
+      prompt:
+        source.prompt,
+      operation:
+        source.operation,
+      size:
+        source.size,
+      durationMs:
+        source.durationMs,
+      cost:
+        source.cost,
+      images
+    });
+  }
+
+  exportStatus.value =
+    "正在生成表格与数据文件…";
+
+  zip.file(
+    "生成记录.csv",
+    "\uFEFF" +
+      workExportCsv(
+        exported
+      )
+  );
+
+  zip.file(
+    "生成记录.json",
+    JSON.stringify(
+      {
+        导出时间:
+          new Date()
+            .toISOString(),
+        记录数:
+          exported.length,
+        图片数:
+          exported.reduce(
+            (
+              total,
+              record
+            ) =>
+              total +
+              record.images.length,
+            0
+          ),
+        数据:
+          exported
+      },
+      null,
+      2
+    )
+  );
+
+  zip.file(
+    "导出说明.txt",
+    [
+      "ZHE AI Studio · 作品库导出",
+      "",
+      `作品记录：${exported.length}`,
+      `图片数量：${totalImages}`,
+      `失败图片：${failures.length}`,
+      "",
+      "文件说明：",
+      "1. 图片：全部导出图片集中保存。",
+      "2. 生成记录.csv：可直接用 Excel / WPS 打开。",
+      "3. 生成记录.json：结构化生成数据。",
+      "4. 导出失败图片.txt：仅在个别图片失败时出现。"
+    ].join("\r\n")
+  );
+
+  if (failures.length) {
+    zip.file(
+      "导出失败图片.txt",
+      [
+        "以下图片未能写入压缩包：",
+        "",
+        ...failures
+      ].join("\r\n")
+    );
+  }
+
+  exportProgress.value = 84;
+  exportStatus.value =
+    "正在压缩作品包…";
+
+  const blob =
+    await zip.generateAsync(
+      {
+        type: "blob",
+        compression:
+          "DEFLATE",
+        compressionOptions: {
+          level: 6
+        }
+      },
+      (metadata) => {
+        exportProgress.value =
+          Math.max(
+            84,
+            Math.min(
+              99,
+              84 +
+                Math.round(
+                  metadata.percent *
+                    0.15
+                )
+            )
+          );
+      }
+    );
+
+  const fileName =
+    workZipName(
+      scope,
+      sources.length
+    );
+
+  downloadWorkBlob(
+    blob,
+    fileName
+  );
+
+  exportProgress.value = 100;
+  exportedName.value =
+    fileName;
+  exportStatus.value =
+    failures.length
+      ? `导出完成，${failures.length} 张图片失败`
+      : `导出完成：${sources.length} 条记录，${totalImages} 张图片`;
+}
+
+function workExportModel(
+  source:
+    UnifiedExportSource
+): string {
+  let model =
+    String(
+      source.model || ""
+    ).trim();
+
+  const provider =
+    String(
+      source.provider || ""
+    ).trim();
+
+  if (
+    provider &&
+    model
+      .toLowerCase()
+      .startsWith(
+        provider.toLowerCase() +
+          "-"
+      )
+  ) {
+    model =
+      model.slice(
+        provider.length + 1
+      );
+  }
+
+  return model || "AI模型";
+}
+
+function workExportCsv(
+  records:
+    UnifiedExportRecord[]
+): string {
+  const rows = [
+    [
+      "记录ID",
+      "生成时间",
+      "模型",
+      "生成类型",
+      "尺寸",
+      "耗时(ms)",
+      "成本",
+      "图片数",
+      "图片文件",
+      "提示词"
+    ],
+    ...records.map(
+      (record) => [
+        record.id,
+        record.createdAt,
+        record.model,
+        record.operation ===
+          "image-edit"
+          ? "图片编辑"
+          : "文生图",
+        record.size,
+        record.durationMs ??
+          "",
+        record.cost ??
+          "",
+        record.images.length,
+        record.images
+          .map(
+            (image) =>
+              image.file
+          )
+          .join(" | "),
+        record.prompt
+      ]
+    )
+  ];
+
+  return rows
+    .map(
+      (row) =>
+        row
+          .map(workCsvCell)
+          .join(",")
+    )
+    .join("\r\n");
+}
+
+function workCsvCell(
+  value: unknown
+): string {
+  const text =
+    String(
+      value ?? ""
+    );
+
+  return /[",\r\n]/.test(
+    text
+  )
+    ? `"${text.replace(/"/g, '""')}"`
+    : text;
+}
+
+function workImageExtension(
+  mimeType:
+    string |
+    undefined,
+  url: string
+): string {
+  const mime =
+    String(
+      mimeType || ""
+    ).toLowerCase();
+
+  if (mime.includes("png")) {
+    return "png";
+  }
+
+  if (mime.includes("webp")) {
+    return "webp";
+  }
+
+  if (mime.includes("gif")) {
+    return "gif";
+  }
+
+  if (mime.includes("avif")) {
+    return "avif";
+  }
+
+  if (
+    mime.includes("jpeg") ||
+    mime.includes("jpg")
+  ) {
+    return "jpg";
+  }
+
+  try {
+    const pathname =
+      new URL(
+        url,
+        window.location.origin
+      ).pathname;
+
+    const match =
+      pathname.match(
+        /\.([a-zA-Z0-9]{2,5})$/
+      );
+
+    const extension =
+      match?.[1]
+        ?.toLowerCase();
+
+    if (
+      extension &&
+      [
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+        "gif",
+        "avif"
+      ].includes(
+        extension
+      )
+    ) {
+      return extension ===
+        "jpeg"
+        ? "jpg"
+        : extension;
+    }
+  } catch {
+    // 保持默认 jpg。
+  }
+
+  return "jpg";
+}
+
+function safeWorkFileSegment(
+  value: string,
+  fallback: string,
+  maxLength = 40
+): string {
+  const normalized =
+    String(
+      value || ""
+    )
+      .trim()
+      .replace(
+        /[<>:"/\\|?*\u0000-\u001F]/g,
+        "_"
+      )
+      .replace(
+        /\s+/g,
+        "_"
+      )
+      .replace(
+        /_+/g,
+        "_"
+      )
+      .replace(
+        /^[._\s]+|[._\s]+$/g,
+        ""
+      );
+
+  return (
+    normalized ||
+    fallback
+  ).slice(
+    0,
+    maxLength
+  );
+}
+
+function workExportTime(
+  createdAt: string
+): string {
+  const date =
+    new Date(
+      createdAt
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "未知时间";
+  }
+
+  return [
+    [
+      date.getFullYear(),
+      workPad(
+        date.getMonth() + 1
+      ),
+      workPad(
+        date.getDate()
+      )
+    ].join("-"),
+    [
+      workPad(
+        date.getHours()
+      ),
+      workPad(
+        date.getMinutes()
+      ),
+      workPad(
+        date.getSeconds()
+      )
+    ].join("")
+  ].join("_");
+}
+
+function workZipName(
+  scope:
+    UnifiedExportScope,
+  count: number
+): string {
+  const scopeName =
+    scope === "single"
+      ? "单个作品"
+      : scope === "selected"
+        ? "选中作品"
+        : "全部作品";
+
+  return `ZHE_AI_作品库_${scopeName}_${count}条_${workExportTime(new Date().toISOString())}.zip`;
+}
+
+function workPad(
+  value: number
+): string {
+  return String(
+    value
+  ).padStart(
+    2,
+    "0"
+  );
+}
+
+function downloadWorkBlob(
+  blob: Blob,
+  fileName: string
+) {
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const anchor =
+    document.createElement(
+      "a"
+    );
+
+  anchor.href = url;
+  anchor.download =
+    fileName;
+  anchor.style.display =
+    "none";
+
+  document.body.appendChild(
+    anchor
+  );
+
+  anchor.click();
+  anchor.remove();
+
+  window.setTimeout(
+    () =>
+      URL.revokeObjectURL(
+        url
+      ),
+    1000
+  );
+}
+
 function displayModel(item: LibraryItem): string {
   let model = item.model.trim();
   const provider = item.provider.trim();
@@ -830,6 +1560,14 @@ function openImage(url: string) {
         </button>
         <button
           type="button"
+          class="work-library-export-main"
+          :disabled="exporting"
+          @click="exportAllWorks"
+        >
+          {{ exporting ? "导出中…" : "导出全部" }}
+        </button>
+        <button
+          type="button"
           :disabled="loading"
           @click="loadLibrary(false)"
         >
@@ -888,6 +1626,41 @@ function openImage(url: string) {
       class="work-library-message error"
     >
       {{ errorMessage }}
+    </div>
+
+    <div
+      v-if="exporting || exportStatus || exportError"
+      class="work-library-export-progress"
+      :class="{
+        done:
+          exportProgress === 100 &&
+          !exportError,
+        error: !!exportError
+      }"
+    >
+      <div>
+        <strong>
+          {{
+            exportError
+              ? "导出失败"
+              : exportProgress === 100
+                ? "导出完成"
+                : "正在导出作品"
+          }}
+        </strong>
+        <span>{{ exportProgress }}%</span>
+      </div>
+      <i>
+        <b
+          :style="{
+            width: `${exportProgress}%`
+          }"
+        ></b>
+      </i>
+      <p>{{ exportError || exportStatus }}</p>
+      <small v-if="exportedName">
+        {{ exportedName }}
+      </small>
     </div>
 
     <div class="work-library-toolbar">
@@ -1033,6 +1806,15 @@ function openImage(url: string) {
       <strong>
         已选择 {{ selectedCount }} 项
       </strong>
+
+      <button
+        type="button"
+        class="work-library-batch-export"
+        :disabled="exporting"
+        @click="exportSelectedWorks"
+      >
+        导出选中
+      </button>
 
       <button
         type="button"
@@ -1218,6 +2000,14 @@ function openImage(url: string) {
           </footer>
 
           <div class="work-library-card-actions">
+            <button
+              type="button"
+              class="work-library-card-export"
+              :disabled="exporting"
+              @click="exportSingleWork(item)"
+            >
+              导出
+            </button>
             <button
               type="button"
               @click="openDetail(item)"
