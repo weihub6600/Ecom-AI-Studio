@@ -764,32 +764,6 @@ export function createModelSettingsService(
 
   async function ensureColumns():
     Promise<void> {
-    const [rows] =
-      await database.pool.query<
-        ColumnRow[]
-      >(
-        `SELECT COLUMN_NAME
-         FROM
-           information_schema.COLUMNS
-         WHERE
-           TABLE_SCHEMA = ?
-           AND TABLE_NAME =
-             'app_model_settings'`,
-        [
-          database.databaseName
-        ]
-      );
-
-    const existing =
-      new Set(
-        rows.map(
-          (row) =>
-            String(
-              row.COLUMN_NAME
-            )
-        )
-      );
-
     for (
       const [
         column,
@@ -798,12 +772,6 @@ export function createModelSettingsService(
         EXTRA_COLUMNS
       )
     ) {
-      if (
-        existing.has(column)
-      ) {
-        continue;
-      }
-
       if (
         !/^[a-z_]+$/.test(
           column
@@ -814,13 +782,65 @@ export function createModelSettingsService(
         );
       }
 
-      await database.pool.query(
-        `ALTER TABLE
-           app_model_settings
-         ADD COLUMN
-           ${column}
-           ${definition}`
-      );
+      const [rows] =
+        await database.pool.query<
+          ColumnRow[]
+        >(
+          `SELECT COLUMN_NAME
+           FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME =
+               'app_model_settings'
+             AND COLUMN_NAME = ?
+           LIMIT 1`,
+          [column]
+        );
+
+      if (rows.length > 0) {
+        continue;
+      }
+
+      try {
+        await database.pool.query(
+          `ALTER TABLE
+             app_model_settings
+           ADD COLUMN
+             ${column}
+             ${definition}`
+        );
+      }
+      catch (error) {
+        const mysqlError =
+          error &&
+          typeof error ===
+            "object"
+            ? error as {
+                code?: unknown;
+                errno?: unknown;
+              }
+            : undefined;
+
+        const code =
+          String(
+            mysqlError?.code ||
+            ""
+          );
+
+        const errno =
+          Number(
+            mysqlError?.errno
+          );
+
+        if (
+          code ===
+            "ER_DUP_FIELDNAME" ||
+          errno === 1060
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
     }
   }
 

@@ -1617,17 +1617,48 @@ export function createCustomProviderService(
     table: string,
     definitions: Record<string, string>
   ): Promise<void> {
-    const [rows] = await pool.query<ColumnRow[]>(
-      `SELECT COLUMN_NAME
-       FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
-      [database.databaseName, table]
-    );
-    const existing = new Set(rows.map((row) => row.COLUMN_NAME));
+    if (!/^[a-z0-9_]+$/i.test(table)) {
+      throw new Error("无效数据库表名");
+    }
+
     for (const [name, definition] of Object.entries(definitions)) {
-      if (existing.has(name)) continue;
-      if (!/^[a-z0-9_]+$/i.test(name)) throw new Error("无效数据库列名");
-      await pool.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+      if (!/^[a-z0-9_]+$/i.test(name)) {
+        throw new Error("无效数据库列名");
+      }
+
+      const [rows] = await pool.query<ColumnRow[]>(
+        `SELECT COLUMN_NAME
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = ?
+           AND COLUMN_NAME = ?
+         LIMIT 1`,
+        [table, name]
+      );
+
+      if (rows.length > 0) {
+        continue;
+      }
+
+      try {
+        await pool.query(
+          `ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`
+        );
+      } catch (error) {
+        const mysqlError =
+          error && typeof error === "object"
+            ? error as { code?: unknown; errno?: unknown }
+            : undefined;
+
+        const code = String(mysqlError?.code || "");
+        const errno = Number(mysqlError?.errno);
+
+        if (code === "ER_DUP_FIELDNAME" || errno === 1060) {
+          continue;
+        }
+
+        throw error;
+      }
     }
   }
 
