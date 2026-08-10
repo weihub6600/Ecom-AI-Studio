@@ -830,7 +830,7 @@ export function createCustomProviderService(
           supports_negative_prompt, supports_seed,
           size_mapping_json, request_overrides_json,
           unit_credit_cents, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           providerId,
           model,
