@@ -16,6 +16,7 @@ import type {
   GeneratedImage,
   GenerationResult,
   ModelCapability,
+  ImageQuality,
   OutputSize,
   ProviderId,
   ServerHistoryRecord,
@@ -41,6 +42,7 @@ const prompt = ref(DEFAULT_PROMPT);
 const generationMode = ref<"text-to-image" | "image-edit">("image-edit");
 const negativePrompt = ref("模糊、变形、错误文字、重复商品、裁切商品、改变Logo、改变包装结构");
 const outputSize = ref<OutputSize>("1024x1024");
+const quality = ref<ImageQuality | undefined>(undefined);
 const count = ref(1);
 const seed = ref<number | undefined>(undefined);
 const uploads = ref<UploadImage[]>([]);
@@ -159,6 +161,14 @@ watch(selectedProviderId, () => {
 watch(selectedModel, (model) => {
   if (!model) return;
   if (!model.sizes.includes(outputSize.value)) outputSize.value = model.sizes[0] || "auto";
+
+  const modelQualities = model.qualities || [];
+  if (modelQualities.length < 1) {
+    quality.value = undefined;
+  } else if (!quality.value || !modelQualities.includes(quality.value)) {
+    quality.value = modelQualities[0];
+  }
+
   count.value = Math.min(count.value, model.maxOutputImages);
   if (uploads.value.length > model.maxReferenceImages) uploads.value = uploads.value.slice(0, model.maxReferenceImages);
   if (!model.supportsSeed) seed.value = undefined;
@@ -1104,6 +1114,10 @@ async function generate() {
               }))
             : [],
         size: outputSize.value,
+        quality:
+          (selectedModel.value.qualities || []).length > 0
+            ? quality.value || selectedModel.value.qualities[0]
+            : undefined,
         count: count.value,
         seed: selectedModel.value.supportsSeed
           ? seed.value
@@ -1490,6 +1504,7 @@ async function downloadAllZip() {
           v-model:prompt="prompt"
           v-model:negative-prompt="negativePrompt"
           v-model:output-size="outputSize"
+          v-model:quality="quality"
           v-model:count="count"
           v-model:seed="seed"
           :providers="providers"

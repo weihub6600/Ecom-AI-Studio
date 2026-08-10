@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import type { AuthUser, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
+import type { AuthUser, ImageQuality, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
 import { displayProviderText, formatBytes, formatPoints } from "../utils/format";
 
 interface ProviderOption { id: ProviderId; name: string }
@@ -12,6 +12,7 @@ const generationMode = defineModel<"text-to-image" | "image-edit">("generationMo
 const prompt = defineModel<string>("prompt", { required: true });
 const negativePrompt = defineModel<string>("negativePrompt", { required: true });
 const outputSize = defineModel<OutputSize>("outputSize", { required: true });
+const quality = defineModel<ImageQuality | undefined>("quality");
 const count = defineModel<number>("count", { required: true });
 const seed = defineModel<number | undefined>("seed");
 
@@ -190,6 +191,19 @@ async function useCustomPrompt() {
   prompt.value = "";
   await nextTick();
   promptInput.value?.focus();
+}
+
+function qualityLabel(value: ImageQuality): string {
+  switch (value) {
+    case "auto":
+      return "自动";
+    case "high":
+      return "高";
+    case "medium":
+      return "中";
+    case "low":
+      return "低";
+  }
 }
 </script>
 
@@ -456,6 +470,34 @@ async function useCustomPrompt() {
           </button>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="(props.selectedModel?.qualities?.length || 0) > 1"
+      class="field-block quality-front-field"
+    >
+      <div class="label-row">
+        <label>图片质量</label>
+        <span>Quality · {{ quality || props.selectedModel?.qualities?.[0] }}</span>
+      </div>
+
+      <div class="segmented quality-front-segmented">
+        <button
+          v-for="item in props.selectedModel?.qualities || []"
+          :key="item"
+          type="button"
+          :class="{ active: quality === item }"
+          :aria-pressed="quality === item"
+          @click="quality = item"
+        >
+          <strong>{{ qualityLabel(item) }}</strong>
+          <small>{{ item }}</small>
+        </button>
+      </div>
+
+      <p class="field-hint">
+        该模型开放了多个 Quality，可按本次任务选择；后台只开放 1 个 Quality 时这里会自动隐藏并使用唯一值。
+      </p>
     </div>
 
     <div v-if="props.selectedModel?.supportsSeed" class="settings-grid small-settings">

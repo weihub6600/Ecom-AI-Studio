@@ -78,8 +78,7 @@ const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "audience", label: "用户运营", hint: "分组与站内消息" },
   { id: "feedback", label: "用户反馈", hint: "建议、问题与回复" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
-  { id: "models", label: "模型与价格", hint: "启停和按张计费" },
-  { id: "providers", label: "模型服务商", hint: "服务商排序与模型参数" },
+  { id: "providers", label: "模型与服务商", hint: "服务商、模型、价格与协议" },
   { id: "audit", label: "操作审计", hint: "站长操作追踪" }
 ];
 
@@ -438,7 +437,7 @@ function auditLabel(action: string) {
 
     <main class="admin-v10-main">
       <header class="admin-v10-topbar">
-        <div><span>V13.7 · 云端后台</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
+        <div><span>V14.2.4 · 云端后台</span><h1>{{ sections.find(item => item.id === activeSection)?.label }}</h1></div>
         <div class="admin-v10-account"><span>{{ currentUser?.username.slice(0, 1).toUpperCase() }}</span><div><strong>{{ currentUser?.username }}</strong><small>站长账号</small></div></div>
       </header>
 

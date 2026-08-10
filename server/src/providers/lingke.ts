@@ -225,7 +225,10 @@ export class LingkeAdapter
                   request.count,
                 quality:
                   request.quality ||
-                  "high",
+                  getBuiltInModelRuntimeConfig(
+                    "lingke",
+                    request.model
+                  )?.qualities?.[0],
                 resolution:
                   "1K",
                 response_format:

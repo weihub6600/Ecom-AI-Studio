@@ -49,6 +49,10 @@ interface ModelSettingRow
     string |
     string[] |
     null;
+  qualities_json:
+    string |
+    string[] |
+    null;
   max_output_images:
     number |
     null;
@@ -67,6 +71,9 @@ interface ModelSettingRow
   asynchronous:
     number |
     null;
+  sort_order:
+    number |
+    null;
   updated_at:
     string |
     Date |
@@ -82,6 +89,7 @@ export interface RuntimeModelSetting {
   enabled: boolean;
   points: number;
   configured: boolean;
+  sortOrder: number;
   capability: ModelCapability;
   updatedAt?: string;
 }
@@ -93,6 +101,7 @@ export interface ModelUpdateInput {
   apiModelId?: unknown;
   description?: unknown;
   sizes?: unknown;
+  qualities?: unknown;
   maxOutputImages?: unknown;
   supportsReferenceImages?:
     unknown;
@@ -100,6 +109,7 @@ export interface ModelUpdateInput {
   supportsNegativePrompt?:
     unknown;
   supportsSeed?: unknown;
+  sortOrder?: unknown;
 }
 
 const EXTRA_COLUMNS:
@@ -109,6 +119,8 @@ const EXTRA_COLUMNS:
     description:
       "VARCHAR(500) NULL",
     sizes_json:
+      "JSON NULL",
+    qualities_json:
       "JSON NULL",
     max_output_images:
       "INT UNSIGNED NULL",
@@ -121,7 +133,9 @@ const EXTRA_COLUMNS:
     supports_seed:
       "TINYINT(1) NULL",
     asynchronous:
-      "TINYINT(1) NULL"
+      "TINYINT(1) NULL",
+    sort_order:
+      "INT UNSIGNED NULL"
   };
 
 export function createModelSettingsService(
@@ -269,6 +283,11 @@ export function createModelSettingsService(
               row?.sizes_json,
               base.sizes
             ),
+          qualities:
+            parseQualities(
+              row?.qualities_json,
+              base.qualities
+            ),
           maxOutputImages:
             nullableInteger(
               row?.max_output_images,
@@ -337,6 +356,11 @@ export function createModelSettingsService(
                 ),
           configured:
             base.configured,
+          sortOrder:
+            nullableInteger(
+              row?.sort_order,
+              500
+            ),
           capability,
           updatedAt:
             toIsoOptional(
@@ -370,6 +394,8 @@ export function createModelSettingsService(
             capability.description,
           sizes:
             capability.sizes,
+          qualities:
+            capability.qualities,
           maxOutputImages:
             capability
               .maxOutputImages,
@@ -410,6 +436,7 @@ export function createModelSettingsService(
     Array<
       ModelCapability & {
         creditCost: number;
+        modelSortOrder: number;
       }
     > {
     return listAll()
@@ -433,6 +460,7 @@ export function createModelSettingsService(
         return {
           ...item.capability,
           providerSortOrder: provider?.sortOrder ?? 100,
+          modelSortOrder: item.sortOrder,
           creditCost: item.points
         };
       });
@@ -544,6 +572,17 @@ export function createModelSettingsService(
             input.points
           );
 
+    const sortOrder =
+      input.sortOrder ===
+        undefined
+        ? current.sortOrder
+        : boundedInteger(
+            input.sortOrder,
+            1,
+            9999,
+            "模型显示顺序需为 1–9999"
+          );
+
     const name =
       input.name ===
         undefined
@@ -586,6 +625,16 @@ export function createModelSettingsService(
             input.sizes
           );
 
+    const qualities =
+      input.qualities ===
+        undefined
+        ? current
+            .capability
+            .qualities
+        : normalizeQualities(
+            input.qualities
+          );
+
     const maxOutputImages =
       input.maxOutputImages ===
         undefined
@@ -595,8 +644,8 @@ export function createModelSettingsService(
         : boundedInteger(
             input.maxOutputImages,
             1,
-            4,
-            "单次最大出图数需为 1–4"
+            16,
+            "单次最大出图数需为 1–16"
           );
 
     const supportsReferenceImages =
@@ -619,8 +668,8 @@ export function createModelSettingsService(
         : boundedInteger(
             input.maxReferenceImages,
             0,
-            8,
-            "最大参考图数量需为 0–8"
+            32,
+            "最大参考图数量需为 0–32"
           );
 
     const supportsNegativePrompt =
@@ -652,9 +701,11 @@ export function createModelSettingsService(
          display_name = ?,
          enabled = ?,
          unit_credit_cents = ?,
+         sort_order = ?,
          api_model_id = ?,
          description = ?,
          sizes_json = ?,
+         qualities_json = ?,
          max_output_images = ?,
          supports_reference_images = ?,
          max_reference_images = ?,
@@ -671,9 +722,11 @@ export function createModelSettingsService(
         Math.round(
           points * 100
         ),
+        sortOrder,
         apiModelId,
         description,
         JSON.stringify(sizes),
+        JSON.stringify(qualities),
         maxOutputImages,
         supportsReferenceImages
           ? 1
@@ -970,6 +1023,45 @@ function normalizeSizes(
   return result;
 }
 
+function normalizeQualities(
+  value: unknown
+): ModelCapability["qualities"] {
+  const values =
+    Array.isArray(value)
+      ? value
+      : typeof value ===
+          "string"
+        ? value.split(
+            /[,，\r\n]/
+          )
+        : [];
+
+  const allowed =
+    new Set([
+      "auto",
+      "high",
+      "medium",
+      "low"
+    ]);
+
+  const result =
+    Array.from(
+      new Set(
+        values
+          .map((item) =>
+            String(item)
+              .trim()
+              .toLowerCase()
+          )
+          .filter((item) =>
+            allowed.has(item)
+          )
+      )
+    ) as ModelCapability["qualities"];
+
+  return result;
+}
+
 function boundedInteger(
   value: unknown,
   min: number,
@@ -1018,6 +1110,28 @@ function parseSizes(
       if (result.length > 0) {
         return result;
       }
+    }
+  }
+  catch {
+    // Use fallback.
+  }
+
+  return fallback;
+}
+
+function parseQualities(
+  value: unknown,
+  fallback: ModelCapability["qualities"]
+): ModelCapability["qualities"] {
+  try {
+    const parsed =
+      typeof value ===
+        "string"
+        ? JSON.parse(value)
+        : value;
+
+    if (Array.isArray(parsed)) {
+      return normalizeQualities(parsed);
     }
   }
   catch {

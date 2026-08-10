@@ -15,10 +15,10 @@ export const generateSchema = z.object({
   operation: z.enum(["text-to-image", "image-edit"]),
   prompt: z.string().trim().min(2, "提示词至少需要 2 个字符").max(5000),
   negativePrompt: z.string().trim().max(2000).optional(),
-  images: z.array(imageSchema).max(10).default([]),
+  images: z.array(imageSchema).max(32).default([]),
   size: z.string().trim().min(1).max(32).regex(/^(auto|\d+:\d+|\d+x\d+)$/, "输出尺寸格式不正确"),
   quality: z.enum(["auto", "high", "medium", "low"]).optional(),
-  count: z.number().int().min(1).max(4),
+  count: z.number().int().min(1).max(16),
   seed: z.number().int().min(0).max(2147483647).optional()
 }).superRefine((value, context) => {
   if (value.operation === "image-edit" && value.images.length === 0) {

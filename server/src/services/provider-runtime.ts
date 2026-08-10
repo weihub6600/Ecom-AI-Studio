@@ -23,6 +23,7 @@ export interface BuiltInModelRuntimeConfig {
   name: string;
   description: string;
   sizes: string[];
+  qualities: string[];
   maxOutputImages: number;
   supportsReferenceImages: boolean;
   maxReferenceImages: number;
