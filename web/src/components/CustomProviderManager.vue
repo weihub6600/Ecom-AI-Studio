@@ -1207,6 +1207,12 @@ function startCreateModel() {
     errorMessage.value = "现有兼容服务商的模型由系统注册；新增自定义模型请先新增通用服务商";
     return;
   }
+
+  const presetToKeep = modelPresetId.value;
+  const presetStillAvailable = availableModelPresets.value.some(
+    (item) => item.id === presetToKeep
+  );
+
   creatingModel.value = true;
   selectedModelId.value = "";
   Object.assign(modelDraft, emptyModelDraft(), {
@@ -1216,6 +1222,10 @@ function startCreateModel() {
   modelPresetId.value = "blank";
   activeTab.value = "models";
   clearMessages();
+
+  if (presetToKeep !== "blank" && presetStillAvailable) {
+    applyModelPreset(presetToKeep);
+  }
 }
 
 function nextModelSortOrder() {
@@ -1456,6 +1466,27 @@ async function saveModel() {
 
     const provider = selectedGeneric.value;
     if (!provider) return;
+
+    if (creatingModel.value) {
+      const modelId = modelDraft.model.trim();
+      const modelName = modelDraft.name.trim();
+
+      if (!modelId) {
+        errorMessage.value =
+          "请先选择模型模板，或填写“内部模型 ID”后再创建。";
+        return;
+      }
+
+      if (!modelName) {
+        errorMessage.value =
+          "请输入模型显示名称后再创建。";
+        return;
+      }
+
+      if (!modelDraft.apiModelId.trim()) {
+        modelDraft.apiModelId = modelId;
+      }
+    }
 
     let sizeMapping: Record<string, unknown>;
     let requestOverrides: Record<string, unknown>;
@@ -1834,7 +1865,7 @@ function messageOf(error: unknown, fallback: string): string {
   <section class="provider-center">
     <header class="center-head">
       <div class="head-copy">
-        <span class="eyebrow">MODEL INFRASTRUCTURE · V14.2.4</span>
+        <span class="eyebrow">MODEL INFRASTRUCTURE · V14.2.7</span>
         <h2>模型与服务商</h2>
         <p>服务商、协议、模型能力、启停与价格集中在一个页面管理。</p>
       </div>
