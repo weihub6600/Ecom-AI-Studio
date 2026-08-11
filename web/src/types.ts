@@ -27,6 +27,7 @@ export interface ModelCapability {
   supportsNegativePrompt: boolean;
   supportsSeed: boolean;
   sizes: OutputSize[];
+  sizeMapping?: Record<string, string>;
   qualities: ImageQuality[];
   maxOutputImages: number;
   asynchronous?: boolean;

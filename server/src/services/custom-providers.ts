@@ -342,6 +342,11 @@ export function createCustomProviderService(
         supportsNegativePrompt: Boolean(row.supports_negative_prompt),
         supportsSeed: Boolean(row.supports_seed),
         sizes,
+        sizeMapping: Object.fromEntries(
+          Object.entries(parseJsonRecord(row.size_mapping_json, {}))
+            .filter(([, value]) => typeof value === "string")
+            .map(([key, value]) => [key, String(value)])
+        ),
         qualities: qualities as ModelCapability["qualities"],
         maxOutputImages: Math.max(1, Number(row.max_output_images) || 1),
         asynchronous: Boolean(readAsyncConfig(provider).enabled)
@@ -2141,16 +2146,36 @@ function normalizeAdapter(value: unknown): AdapterType {
 }
 
 function normalizeSizes(value: unknown): string[] {
+  // V14_3_0_1_DESCRIPTIVE_SIZE_LABELS
+  // sizes are front-end display labels. The actual provider value is resolved
+  // separately through size_mapping_json, so descriptive labels such as
+  // "4K 正方形 (1:1)" must remain valid.
   const items = Array.isArray(value)
     ? value
     : typeof value === "string"
       ? value.split(/[,，\n]/)
       : [];
-  const result = Array.from(new Set(
-    items.map((item) => String(item).trim()).filter((item) => /^(auto|\d+:\d+|\d+x\d+)$/.test(item))
-  )).slice(0, 40);
+
+  const normalized = items
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+
+  const tooLong = normalized.find((item) => item.length > 80);
+  if (tooLong) {
+    throw new AuthError(
+      400,
+      "INVALID_MODEL_SIZE_LABEL",
+      "尺寸名称不能超过 80 个字符"
+    );
+  }
+
+  const result = Array.from(new Set(normalized)).slice(0, 40);
   if (result.length < 1) {
-    throw new AuthError(400, "INVALID_MODEL_SIZES", "至少填写一个尺寸，例如 1024x1024 或 1:1");
+    throw new AuthError(
+      400,
+      "INVALID_MODEL_SIZES",
+      "至少填写一个尺寸或比例选项"
+    );
   }
   return result;
 }

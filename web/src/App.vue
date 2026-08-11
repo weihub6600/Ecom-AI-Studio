@@ -120,7 +120,13 @@ const providers = computed(() => {
 });
 const availableModels = computed(() => models.value.filter((model) => model.provider === selectedProviderId.value));
 const selectedModel = computed(() => availableModels.value.find((model) => model.id === selectedModelId.value) || availableModels.value[0]);
-const sizeOptions = computed(() => (selectedModel.value?.sizes || []).map((value) => ({ value, title: formatSizeTitle(value) })));
+const sizeOptions = computed(() =>
+  (selectedModel.value?.sizes || []).map((value) => ({
+    value,
+    title: formatSizeTitle(value),
+    apiValue: selectedModel.value?.sizeMapping?.[value] || value
+  }))
+);
 const selectedUnitCreditCost = computed(() => selectedModel.value?.creditCost || 0);
 const selectedCreditCost = computed(() => Number((selectedUnitCreditCost.value * Math.max(1, count.value)).toFixed(2)));
 const hasEnoughCredits = computed(() => Boolean(!authUser.value || authUser.value.role === "admin" || authUser.value.credits >= selectedCreditCost.value));

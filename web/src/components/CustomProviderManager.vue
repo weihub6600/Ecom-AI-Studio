@@ -1468,6 +1468,27 @@ async function saveModel() {
     if (!provider) return;
 
     if (creatingModel.value) {
+      // V14_3_0_1_LINGKE_INTERNAL_ID
+      // Lingke uses one third-party API model id (gpt-image-2), while the
+      // console may keep separate 1K / 2K / 4K local configurations.
+      // If the legacy template still leaves the internal id as gpt-image-2,
+      // infer the tier from the display name / size labels before POSTing.
+      if (
+        knownApiProfile.value === "lingke" &&
+        modelDraft.model.trim() === "gpt-image-2" &&
+        modelDraft.apiModelId.trim() === "gpt-image-2"
+      ) {
+        const tierSource = [
+          modelDraft.name,
+          ...sizeRows.value.map((row) => row.label)
+        ].join(" ");
+        const tierMatch = /(?:^|[^0-9A-Za-z])(1K|2K|4K)(?=$|[^0-9A-Za-z])/i.exec(tierSource);
+        const tier = tierMatch?.[1]?.toLowerCase();
+        if (tier) {
+          modelDraft.model = `gpt-image-2-${tier}`;
+        }
+      }
+
       const modelId = modelDraft.model.trim();
       const modelName = modelDraft.name.trim();
 
@@ -2735,7 +2756,7 @@ function messageOf(error: unknown, fallback: string): string {
 
                     <div
                       v-for="(row, index) in sizeRows"
-                      :key="`${index}-${row.label}`"
+                    :key="index"
                       class="size-builder-row"
                     >
                       <input

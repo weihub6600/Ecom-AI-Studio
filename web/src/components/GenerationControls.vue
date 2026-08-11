@@ -4,7 +4,7 @@ import type { AuthUser, ImageQuality, ModelCapability, OutputSize, ProviderId, U
 import { displayProviderText, formatBytes, formatPoints } from "../utils/format";
 
 interface ProviderOption { id: ProviderId; name: string }
-interface SizeOption { value: OutputSize; title: string }
+interface SizeOption { value: OutputSize; title: string; apiValue?: string }
 
 const selectedProviderId = defineModel<ProviderId>("selectedProviderId", { required: true });
 const selectedModelId = defineModel<string>("selectedModelId", { required: true });
@@ -464,7 +464,11 @@ function qualityLabel(value: ImageQuality): string {
             <span class="size-preview" :data-size="option.value"><i></i></span>
             <span class="size-copy">
               <strong>{{ option.title }}</strong>
-              <small>{{ option.value === "auto" ? "AUTO" : option.value }}</small>
+              <small
+                v-if="(option.value === 'auto' ? 'AUTO' : (option.apiValue || option.value)) !== option.title"
+              >
+                {{ option.value === "auto" ? "AUTO" : (option.apiValue || option.value) }}
+              </small>
             </span>
             <span class="size-check">✓</span>
           </button>
