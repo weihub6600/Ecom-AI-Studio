@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// V14_3_1_3_1_PASS_MODELS_TO_HISTORY
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import UserPanel from "./UserPanel.vue";
 import AnnouncementBar from "./components/AnnouncementBar.vue";
@@ -1961,6 +1962,7 @@ async function downloadAllZip() {
           />
           <HistoryPanel
             :records="historyRecords"
+            :models="models"
             :active-history-id="activeHistoryId"
             :authenticated="isAuthenticated"
             :favorites="favorites"

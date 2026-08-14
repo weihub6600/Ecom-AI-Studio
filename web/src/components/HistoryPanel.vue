@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { ServerHistoryRecord } from "../types";
-import { formatDate, formatSizeTitle, providerDisplayName } from "../utils/format";
+// V14_3_1_3_1_HISTORY_DISPLAY_MODEL_NAME
+// V14_3_1_3_HISTORY_MODEL_ONLY
+import type { ModelCapability, ServerHistoryRecord } from "../types";
+import { formatDate, formatSizeTitle } from "../utils/format";
 
 const props = defineProps<{
   records: ServerHistoryRecord[];
+  models: ModelCapability[];
   activeHistoryId: string | null;
   authenticated: boolean;
   favorites: Set<string>;
@@ -17,6 +20,80 @@ const emit = defineEmits<{
   showResult: [];
   toggleFavorite: [id: string];
 }>();
+
+
+
+function historyModelDisplayName(
+  record: ServerHistoryRecord
+): string {
+  const recordProvider =
+    String(record.provider || "")
+      .trim()
+      .toLowerCase();
+
+  const recordModel =
+    String(record.model || "")
+      .trim();
+
+  const recordModelLower =
+    recordModel.toLowerCase();
+
+  const sameProvider =
+    props.models.filter(
+      (model) =>
+        String(model.provider || "")
+          .trim()
+          .toLowerCase() ===
+        recordProvider
+    );
+
+  const exact =
+    sameProvider.find(
+      (model) =>
+        String(model.id || "")
+          .trim()
+          .toLowerCase() ===
+        recordModelLower
+    );
+
+  if (exact?.name?.trim()) {
+    return exact.name.trim();
+  }
+
+  const compatible =
+    sameProvider.find(
+      (model) => {
+        const modelId =
+          String(model.id || "")
+            .trim()
+            .toLowerCase();
+
+        if (
+          !modelId ||
+          !recordModelLower
+        ) {
+          return false;
+        }
+
+        return (
+          modelId.endsWith(
+            `-${recordModelLower}`
+          ) ||
+          recordModelLower.endsWith(
+            `-${modelId}`
+          )
+        );
+      }
+    );
+
+  if (
+    compatible?.name?.trim()
+  ) {
+    return compatible.name.trim();
+  }
+
+  return recordModel;
+}
 
 </script>
 
@@ -59,7 +136,7 @@ const emit = defineEmits<{
 
         <div class="history-copy">
           <div class="history-meta">
-            <strong>{{ providerDisplayName(record.provider, record.providerName) }} · {{ record.model }}</strong>
+            <strong>{{ historyModelDisplayName(record) }}</strong>
             <span>{{ formatDate(record.createdAt) }}</span>
           </div>
           <p>{{ record.prompt }}</p>
