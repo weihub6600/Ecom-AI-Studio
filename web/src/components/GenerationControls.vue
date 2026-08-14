@@ -1,7 +1,12 @@
 <script setup lang="ts">
+// V14_4_0_2_1_AI_PROMPT_BUTTON_TEXT_FIX
+// V14_4_0_2_AI_PROMPT_BUTTON_TEXT
+// V14_4_0_1_PROMPT_BUTTON_LAYOUT
+// V14_4_0_PROMPT_OPTIMIZER_UI_FINAL
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { AuthUser, ImageQuality, ModelCapability, OutputSize, ProviderId, UploadImage } from "../types";
 import { displayProviderText, formatBytes, formatPoints } from "../utils/format";
+import PromptOptimizerDialog from "./PromptOptimizerDialog.vue";
 
 interface ProviderOption { id: ProviderId; name: string }
 interface SizeOption { value: OutputSize; title: string; apiValue?: string }
@@ -46,6 +51,7 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const promptInput = ref<HTMLTextAreaElement | null>(null);
 const dragging = ref(false);
+const promptOptimizerOpen = ref(false);
 
 interface PromptPreset {
   id: string;
@@ -53,7 +59,7 @@ interface PromptPreset {
   prompt: string;
 }
 
-const MAX_PROMPT_PRESETS = 7;
+const MAX_PROMPT_PRESETS = 4;
 const PROMPT_PRESET_STORAGE_PREFIX = "ecom-ai-studio:prompt-presets:";
 const promptPresets = ref<PromptPreset[]>([]);
 
@@ -189,6 +195,26 @@ function onGlobalPaste(event: ClipboardEvent) {
 
 async function useCustomPrompt() {
   prompt.value = "";
+  await nextTick();
+  promptInput.value?.focus();
+}
+
+function openPromptOptimizer() {
+  if (!props.isAuthenticated) {
+    window.alert("登录后即可使用 AI 优化提示词提示词。");
+    return;
+  }
+  if (prompt.value.trim().length < 2) {
+    window.alert("请先输入至少 2 个字符的提示词。");
+    promptInput.value?.focus();
+    return;
+  }
+  promptOptimizerOpen.value = true;
+}
+
+async function applyOptimizedPrompt(value: string) {
+  prompt.value = value;
+  promptOptimizerOpen.value = false;
   await nextTick();
   promptInput.value?.focus();
 }
@@ -407,7 +433,16 @@ function qualityLabel(value: ImageQuality): string {
         placeholder="请输入提示词，例如主体、场景、构图、光线和必须保留的细节"
       ></textarea>
 
-      <div class="template-row">
+      <div class="template-row prompt-primary-row">
+        <button
+          type="button"
+          class="prompt-ai-button"
+          :disabled="!prompt.trim()"
+          @click="openPromptOptimizer"
+        >
+          <span>✦</span>
+          AI 优化提示词
+        </button>
         <button type="button" @click="useCustomPrompt">清空提示词</button>
         <button
           type="button"
@@ -553,4 +588,40 @@ function qualityLabel(value: ImageQuality): string {
       }}
     </button>
   </section>
+  <PromptOptimizerDialog
+    :open="promptOptimizerOpen"
+    :prompt="prompt"
+    :generation-mode="generationMode"
+    :provider="selectedProviderId"
+    :model="selectedModelId"
+    :model-name="props.selectedModel?.name"
+    :size="outputSize"
+    @close="promptOptimizerOpen = false"
+    @apply="applyOptimizedPrompt"
+  />
 </template>
+
+
+<style scoped>
+/* PROMPT_AI_BUTTON_STYLE_FINAL */
+.prompt-ai-button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border:1px solid #cfc8ef;border-radius:9px;background:linear-gradient(135deg,#f7f4ff,#f1effb);color:#5e4bb8;font:inherit;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 5px 14px rgba(101,82,207,.08)}
+.prompt-ai-button span{font-size:14px}.prompt-ai-button:hover:not(:disabled){border-color:#aa9ee2;background:#f2efff}.prompt-ai-button:disabled{opacity:.48;cursor:not-allowed}</style>
+
+
+<style scoped>
+/* V14_4_0_1_PROMPT_PRIMARY_ROW_STYLE */
+.prompt-primary-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+}
+.prompt-primary-row > button{
+  white-space:nowrap;
+}
+@media (max-width:720px){
+  .prompt-primary-row{
+    flex-wrap:wrap;
+  }
+}
+</style>

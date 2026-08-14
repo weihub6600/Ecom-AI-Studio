@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// V14_4_0_PROMPT_OPTIMIZER_ADMIN_FINAL
 import RegistrationSettingsPanel from "./components/RegistrationSettingsPanel.vue";
 import InvitationSettingsPanel from "./components/InvitationSettingsPanel.vue";
 import { computed, onMounted, ref } from "vue";
@@ -17,6 +18,7 @@ import type {
 } from "./types";
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
 import ApiProviderManager from "./components/ApiProviderManager.vue";
+import PromptOptimizerManager from "./components/PromptOptimizerManager.vue";
 import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue";
 import AdminGalleryManager from "./components/AdminGalleryManager.vue";
 import AdminStoragePackageManager from "./components/AdminStoragePackageManager.vue";
@@ -25,7 +27,7 @@ import AdminFeedbackManager from "./components/AdminFeedbackManager.vue";
 import AdminUserAccountTools from "./components/AdminUserAccountTools.vue";
 import AdminTaskManager from "./components/AdminTaskManager.vue";
 
-type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "audience" | "feedback" | "cards" | "models" | "audit" | "providers";
+type Section = "dashboard" | "tasks" | "announcements" | "gallery" | "storage" | "users" | "audience" | "feedback" | "cards" | "models" | "audit" | "providers" | "assistant";
 type DetailTab = "usage" | "credits" | "logins";
 
 const currentUser = ref<AuthUser | null>(null);
@@ -78,6 +80,7 @@ const sections: Array<{ id: Section; label: string; hint: string }> = [
   { id: "audience", label: "用户运营", hint: "分组与站内消息" },
   { id: "feedback", label: "用户反馈", hint: "建议、问题与回复" },
   { id: "cards", label: "卡密管理", hint: "生成、查询与删除" },
+  { id: "assistant", label: "AI 辅助工具", hint: "提示词优化与智能能力" },
   { id: "providers", label: "模型与服务商", hint: "服务商、模型、价格与协议" },
   { id: "audit", label: "操作审计", hint: "站长操作追踪" }
 ];
@@ -551,6 +554,10 @@ function auditLabel(action: string) {
       <section v-else-if="activeSection === 'models'" class="admin-v10-section">
         <div class="admin-v10-section-head"><div><h2>模型启停与按张价格</h2><p>保存后立即影响前台模型列表和下一次生图扣费。</p></div><button @click="loadModels">刷新</button></div>
         <div class="model-setting-grid"><article v-for="model in modelSettings" :key="modelKey(model)" class="admin-v10-card"><div class="model-setting-title"><span>{{ model.providerName.slice(0,1) }}</span><div><strong>{{ model.providerName }} · {{ model.name }}</strong><small>{{ model.model }}</small></div><i :class="model.configured ? 'ready' : 'offline'">{{ model.configured ? 'API 已配置' : '缺少 API Key' }}</i></div><p>{{ model.description }}</p><div class="model-setting-meta"><span>最多 {{ model.maxOutputImages }} 张</span><span>{{ model.asynchronous ? '异步任务' : '同步任务' }}</span></div><div class="model-setting-form"><label><input v-model="modelDraft(model).enabled" type="checkbox" />允许前台使用</label><label>单张积分<input v-model="modelDraft(model).points" type="number" min="0" step="0.01" /></label></div><button class="save-model" :disabled="savingModelKey === modelKey(model)" @click="saveModel(model)">{{ savingModelKey === modelKey(model) ? '保存中…' : '保存设置' }}</button></article></div>
+      </section>
+
+      <section v-else-if="activeSection === 'assistant'" class="admin-v10-section">
+        <PromptOptimizerManager />
       </section>
 
             <section

@@ -1,3 +1,4 @@
+// V14_4_0_PROMPT_OPTIMIZER_ROUTE_FINAL
 import express, {
   type ErrorRequestHandler,
   type Express,
@@ -53,6 +54,9 @@ import {
 import {
   createCustomProviderRouter
 } from "../routes/custom-provider.routes.js";
+import {
+  createPromptOptimizerRouter
+} from "../routes/prompt-optimizer.routes.js";
 import {
   createWorkLibraryService
 } from "../services/work-library.js";
@@ -311,6 +315,12 @@ app.use(createAccountRouter({
       context.builtInProviderSettingsService,
     modelSettingsService:
       context.modelSettingsService,
+    requireAuth,
+    requireAdmin
+  }));
+
+  app.use(createPromptOptimizerRouter({
+    database: context.database,
     requireAuth,
     requireAdmin
   }));
