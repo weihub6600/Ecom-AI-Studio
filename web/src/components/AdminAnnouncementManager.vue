@@ -1,6 +1,8 @@
 <script setup lang="ts">
+// V14_3_1_2_1_NEWLINE_COMPILE_FIX
 import {
   computed,
+  nextTick,
   onMounted,
   ref
 } from "vue";
@@ -18,6 +20,9 @@ import {
   apiRequest,
   jsonRequest
 } from "../api/client";
+import AnnouncementRichText from "./AnnouncementRichText.vue";
+
+// V14_3_1_2_ANNOUNCEMENT_RICH_TEXT
 
 type AnnouncementKind =
   | "info"
@@ -82,6 +87,9 @@ const title =
 const content =
   ref("");
 
+const contentInput =
+  ref<HTMLTextAreaElement | null>(null);
+
 const kind =
   ref<AnnouncementKind>(
     "info"
@@ -140,6 +148,27 @@ const previewContent =
     content.value.trim() ||
     "在这里预览公告正文、倒计时、跳转按钮和动态效果。"
   );
+
+type ContentFormat = "heading" | "bold" | "bullet" | "ordered" | "link";
+
+async function insertContentFormat(format: ContentFormat) {
+  const input = contentInput.value;
+  const start = input?.selectionStart ?? content.value.length;
+  const end = input?.selectionEnd ?? start;
+  const selected = content.value.slice(start, end);
+  let replacement = "", selectionStart = start, selectionEnd = start;
+  if (format === "bold") {
+    const body = selected || "重点内容"; replacement = `**${body}**`; selectionStart = start + 2; selectionEnd = selectionStart + body.length;
+  } else if (format === "heading") {
+    const body = selected || "小标题"; replacement = body.split("\n").map(line => line.trim() ? `## ${line}` : line).join("\n"); selectionStart = start + 3; selectionEnd = start + replacement.length;
+  } else if (format === "bullet" || format === "ordered") {
+    const body = selected || "列表内容"; replacement = body.split("\n").map((line,index)=>!line.trim()?line:(format === "bullet" ? `- ${line}` : `${index+1}. ${line}`)).join("\n"); selectionStart = start; selectionEnd = start + replacement.length;
+  } else {
+    const label = selected || "链接文字"; replacement = `[${label}](https://)`; selectionStart = start + label.length + 3; selectionEnd = start + replacement.length - 1;
+  }
+  content.value = content.value.slice(0,start) + replacement + content.value.slice(end);
+  await nextTick(); contentInput.value?.focus(); contentInput.value?.setSelectionRange(selectionStart, selectionEnd);
+}
 
 onMounted(load);
 
@@ -606,14 +635,17 @@ function messageOf(
           />
         </label>
 
-        <label class="wide">
+        <label class="wide announcement-content-field">
           <span>内容</span>
-          <textarea
-            v-model="content"
-            maxlength="1200"
-            rows="4"
-            placeholder="请输入公告正文"
-          ></textarea>
+          <div class="announcement-rich-toolbar" role="toolbar" aria-label="公告正文格式工具">
+            <button type="button" @click="insertContentFormat('heading')">小标题</button>
+            <button type="button" @click="insertContentFormat('bold')">加粗</button>
+            <button type="button" @click="insertContentFormat('bullet')">项目符号</button>
+            <button type="button" @click="insertContentFormat('ordered')">编号列表</button>
+            <button type="button" @click="insertContentFormat('link')">链接</button>
+          </div>
+          <textarea ref="contentInput" v-model="content" maxlength="1200" rows="8" placeholder="支持空行分段；也可使用上方工具添加小标题、加粗、列表和链接"></textarea>
+          <small class="announcement-format-hint">支持空行分段；轻量格式：## 小标题、**加粗**、- 项目符号、1. 编号、[文字](链接)</small>
         </label>
 
         <label>
@@ -879,7 +911,7 @@ function messageOf(
             </div>
 
             <div class="preview-popup-content">
-              {{ previewContent }}
+              <AnnouncementRichText :content="previewContent" />
             </div>
 
             <div class="preview-popup-meta">
@@ -2059,4 +2091,10 @@ button.soft{
   }
 }
 
+</style>
+
+
+<style scoped>
+/* V14_3_1_2_ADMIN_RICH_STYLE */
+.announcement-content-field{gap:8px}.announcement-rich-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:7px;border:1px solid #e4e5ec;border-bottom:0;border-radius:10px 10px 0 0;background:#f8f8fb}.announcement-rich-toolbar button{min-height:28px;padding:0 9px;border:1px solid #dedbe9;border-radius:7px;background:#fff;color:#5d4bb7;font:inherit;font-size:10.5px;font-weight:800;cursor:pointer}.announcement-rich-toolbar button:hover{border-color:#bdb4e5;background:#f3f0ff}.announcement-content-field textarea{margin-top:-8px;border-radius:0 0 10px 10px}.announcement-format-hint{color:#8b8f9c;font-size:10px;font-weight:550;line-height:1.55}.preview-popup-content :deep(.announcement-rich-text){color:inherit;font-size:inherit;line-height:1.72;text-align:left}
 </style>

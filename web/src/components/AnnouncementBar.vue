@@ -19,6 +19,9 @@ import {
 import {
   apiRequest
 } from "../api/client";
+import AnnouncementRichText from "./AnnouncementRichText.vue";
+
+// V14_3_1_2_ANNOUNCEMENT_RICH_TEXT
 
 type AnnouncementKind =
   | "info"
@@ -649,9 +652,9 @@ function toggleCloseMenu(
       </header>
 
       <section class="announcement-popup-content">
-        <p>
-          {{ popupItem.content }}
-        </p>
+        <AnnouncementRichText
+          :content="popupItem.content"
+        />
       </section>
 
       <div class="announcement-popup-meta">
@@ -1737,4 +1740,12 @@ function toggleCloseMenu(
   }
 }
 
+</style>
+
+
+<style scoped>
+/* V14_3_1_2_POPUP_RICH_STYLE */
+.announcement-popup-content :deep(.announcement-rich-text){color:#484e5e;font-size:15px;font-weight:550;line-height:1.85;text-align:left}
+.announcement-popup-content :deep(.announcement-rich-text h3),.announcement-popup-content :deep(.announcement-rich-text h4),.announcement-popup-content :deep(.announcement-rich-text h5){color:#343949}
+.announcement-popup-content :deep(.announcement-rich-text a){color:#6654bd}
 </style>
