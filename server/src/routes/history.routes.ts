@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import type { HistoryService } from "../history.js";
-import { HistoryValidationError, parseHistorySaveInput } from "../history.js";
+import { HistoryValidationError, parseHistorySaveInput, parseHistorySourceImages } from "../history.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { readLimit, readRouteParam } from "../utils/express.js";
 
@@ -148,6 +148,81 @@ export function createHistoryRouter(options: {
       });
     }
   });
+
+  router.post(
+    "/api/history/:id/source-images",
+    requireAuth,
+    async (request, response) => {
+      try {
+        const user = getAuthenticatedUser(request);
+        const historyId =
+          readRouteParam(request.params.id);
+
+        if (!historyId) {
+          return response.status(400).json({
+            error: {
+              code: "INVALID_HISTORY_ID",
+              message: "缺少历史记录 ID"
+            }
+          });
+        }
+
+        const images =
+          parseHistorySourceImages(
+            request.body?.images
+          );
+
+        const record =
+          await historyService.saveSourceImages(
+            historyId,
+            user.id,
+            images,
+            {
+              clientIp: request.ip,
+              userAgent:
+                request.get("user-agent"),
+              ownerUsername:
+                user.username
+            }
+          );
+
+        return response.status(201).json({
+          success: true,
+          record
+        });
+      } catch (error) {
+        if (
+          error instanceof
+          HistoryValidationError
+        ) {
+          return response.status(400).json({
+            error: {
+              code:
+                "INVALID_HISTORY_SOURCE_IMAGES",
+              message:
+                error.message
+            }
+          });
+        }
+
+        console.error(
+          "History source image save error",
+          error
+        );
+
+        return response.status(502).json({
+          error: {
+            code:
+              "HISTORY_SOURCE_IMAGE_SAVE_ERROR",
+            message:
+              error instanceof Error
+                ? error.message
+                : "原始参考素材保存失败"
+          }
+        });
+      }
+    }
+  );
 
   router.delete("/api/history/:id", requireAuth, async (request, response) => {
     try {

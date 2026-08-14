@@ -9,6 +9,7 @@ import AuthDialog from "./components/AuthDialog.vue";
 import GenerationControls from "./components/GenerationControls.vue";
 import ResultPanel from "./components/ResultPanel.vue";
 import HistoryPanel from "./components/HistoryPanel.vue";
+import RefineDialog from "./components/RefineDialog.vue";
 import TaskCenter from "./components/TaskCenter.vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
@@ -56,6 +57,8 @@ const errorMessage = ref("");
 const historyRecords = ref<ServerHistoryRecord[]>([]);
 const activeHistoryId = ref<string | null>(null);
 const restoringHistory = ref(false);
+const refineRecord = ref<ServerHistoryRecord | null>(null);
+const refineBusy = ref(false);
 const authUser = ref<AuthUser | null>(null);
 const authReady = ref(false);
 const authDialogOpen = ref(false);
@@ -886,6 +889,46 @@ async function loadHistory(restoreLatest = false) {
   }
 }
 
+async function archiveHistorySources(
+  record: ServerHistoryRecord,
+  sourceUploads: UploadImage[] = uploads.value
+): Promise<ServerHistoryRecord> {
+  if (
+    generationMode.value !== "image-edit" ||
+    !sourceUploads.length
+  ) {
+    return record;
+  }
+
+  try {
+    const data = await apiRequest<{
+      record: ServerHistoryRecord;
+    }>(
+      `/api/history/${encodeURIComponent(record.id)}/source-images`,
+      jsonRequest({
+        images: sourceUploads.map(
+          ({ mimeType, dataUrl }) => ({
+            url: dataUrl,
+            mimeType
+          })
+        )
+      })
+    );
+
+    return data.record;
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "未知错误";
+
+    errorMessage.value =
+      `图片已生成，但原始参考素材归档失败；以后“再次调整”时可能只能使用结果图：${message}`;
+
+    return record;
+  }
+}
+
 async function acceptSavedHistory(
   record: ServerHistoryRecord,
   meta: GenerationResult
@@ -930,8 +973,13 @@ async function saveGenerationToServer(
       cost: meta.cost,
       images: generatedImages
     }));
+    const recordWithSources =
+      await archiveHistorySources(
+        data.record
+      );
+
     await acceptSavedHistory(
-      data.record,
+      recordWithSources,
       meta
     );
 
@@ -993,8 +1041,343 @@ async function deleteHistory(record: ServerHistoryRecord) {
   }
 }
 
-async function handleReGenerate(record: ServerHistoryRecord) {
-  await restoreHistory(record, false);
+function openRefine(
+  record: ServerHistoryRecord
+) {
+  refineRecord.value = record;
+}
+
+function buildRefineReferences(
+  record: ServerHistoryRecord,
+  maxReferenceImages: number
+): Array<{
+  image: GeneratedImage;
+  kind: "source" | "result";
+  index: number;
+}> {
+  const limit = Math.max(
+    1,
+    maxReferenceImages
+  );
+
+  const sources =
+    record.sourceImages || [];
+
+  const current =
+    record.images || [];
+
+  const references: Array<{
+    image: GeneratedImage;
+    kind: "source" | "result";
+    index: number;
+  }> = [];
+
+  if (
+    sources.length > 0 &&
+    current.length > 0 &&
+    limit > 1
+  ) {
+    const sourceLimit =
+      Math.min(
+        sources.length,
+        limit - 1
+      );
+
+    for (
+      let index = 0;
+      index < sourceLimit;
+      index += 1
+    ) {
+      const image = sources[index];
+      if (image) {
+        references.push({
+          image,
+          kind: "source",
+          index
+        });
+      }
+    }
+  }
+
+  for (
+    let index = 0;
+    index < current.length &&
+    references.length < limit;
+    index += 1
+  ) {
+    const image = current[index];
+    if (image) {
+      references.push({
+        image,
+        kind: "result",
+        index
+      });
+    }
+  }
+
+  if (!references.length) {
+    for (
+      let index = 0;
+      index < sources.length &&
+      references.length < limit;
+      index += 1
+    ) {
+      const image = sources[index];
+      if (image) {
+        references.push({
+          image,
+          kind: "source",
+          index
+        });
+      }
+    }
+  }
+
+  return references;
+}
+
+async function historyImageToUpload(
+  item: {
+    image: GeneratedImage;
+    kind: "source" | "result";
+    index: number;
+  },
+  recordId: string
+): Promise<UploadImage> {
+  const response =
+    await fetch(
+      item.image.url,
+      {
+        credentials: "same-origin"
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `读取历史参考图失败：HTTP ${response.status}`
+    );
+  }
+
+  const blob =
+    await response.blob();
+
+  const mimeType =
+    blob.type === "image/png" ||
+    blob.type === "image/jpeg" ||
+    blob.type === "image/webp"
+      ? blob.type
+      : item.image.mimeType === "image/png" ||
+          item.image.mimeType === "image/jpeg" ||
+          item.image.mimeType === "image/webp"
+        ? item.image.mimeType
+        : undefined;
+
+  if (!mimeType) {
+    throw new Error(
+      "当前历史图片格式不支持再次调整"
+    );
+  }
+
+  const dataUrl =
+    await new Promise<string>(
+      (resolve, reject) => {
+        const reader =
+          new FileReader();
+
+        reader.onload = () =>
+          resolve(
+            String(reader.result)
+          );
+
+        reader.onerror = () =>
+          reject(
+            new Error(
+              "历史参考图读取失败"
+            )
+          );
+
+        reader.readAsDataURL(blob);
+      }
+    );
+
+  const extension =
+    mimeType === "image/jpeg"
+      ? "jpg"
+      : mimeType === "image/webp"
+        ? "webp"
+        : "png";
+
+  return {
+    id:
+      `refine-${recordId}-${item.kind}-${item.index}-${Date.now()}`,
+    name:
+      item.kind === "source"
+        ? `original-${item.index + 1}.${extension}`
+        : `current-result-${item.index + 1}.${extension}`,
+    mimeType,
+    dataUrl,
+    size:
+      blob.size
+  };
+}
+
+async function handleRefineConfirm(
+  adjustmentPrompt: string
+) {
+  const record =
+    refineRecord.value;
+
+  if (
+    !record ||
+    refineBusy.value
+  ) {
+    return;
+  }
+
+  const nextPrompt =
+    adjustmentPrompt.trim();
+
+  if (nextPrompt.length < 2) {
+    return;
+  }
+
+  const model =
+    models.value.find(
+      (item) =>
+        item.provider ===
+          record.provider &&
+        item.id ===
+          record.model
+    );
+
+  if (
+    !model ||
+    !model.configured
+  ) {
+    refineRecord.value = null;
+    errorMessage.value =
+      "原历史记录对应的模型当前不可用，请先在后台检查模型配置";
+    return;
+  }
+
+  if (
+    !model.supportsReferenceImages ||
+    model.maxReferenceImages < 1
+  ) {
+    refineRecord.value = null;
+    errorMessage.value =
+      "该模型不支持参考图，因此无法基于当前结果进行再次调整";
+    return;
+  }
+
+  const references =
+    buildRefineReferences(
+      record,
+      model.maxReferenceImages
+    );
+
+  if (!references.length) {
+    refineRecord.value = null;
+    errorMessage.value =
+      "这条历史记录没有可用于二次调整的图片";
+    return;
+  }
+
+  refineBusy.value = true;
+
+  try {
+    const prepared:
+      UploadImage[] = [];
+
+    for (
+      const reference of references
+    ) {
+      prepared.push(
+        await historyImageToUpload(
+          reference,
+          record.id
+        )
+      );
+    }
+
+    restoringHistory.value = true;
+
+    selectedProviderId.value =
+      record.provider;
+
+    await nextTick();
+
+    selectedModelId.value =
+      model.id;
+
+    generationMode.value =
+      "image-edit";
+
+    await nextTick();
+
+    if (
+      model.sizes.includes(
+        record.size
+      )
+    ) {
+      outputSize.value =
+        record.size;
+    }
+
+    count.value =
+      Math.min(
+        Math.max(
+          1,
+          record.images.length
+        ),
+        model.maxOutputImages
+      );
+
+    uploads.value =
+      prepared;
+
+    prompt.value =
+      `基于这些参考图进行二次调整：${nextPrompt}`;
+
+    results.value =
+      record.images;
+
+    resultDimensions.value =
+      {};
+
+    generationMeta.value = {
+      provider:
+        record.provider,
+      model:
+        record.model,
+      images:
+        record.images,
+      durationMs:
+        record.durationMs || 0,
+      status:
+        "completed",
+      cost:
+        record.cost
+    };
+
+    activeHistoryId.value =
+      record.id;
+
+    refineRecord.value =
+      null;
+  } catch (error) {
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : "载入历史素材失败";
+    return;
+  } finally {
+    restoringHistory.value =
+      false;
+    refineBusy.value =
+      false;
+  }
+
   await nextTick();
   await generate();
 }
@@ -1192,8 +1575,13 @@ async function generate() {
 
     if (results.value.length) {
       if (taskPayload.historyRecord) {
+        const historyWithSources =
+          await archiveHistorySources(
+            taskPayload.historyRecord
+          );
+
         await acceptSavedHistory(
-          taskPayload.historyRecord,
+          historyWithSources,
           completedMeta
         );
       } else {
@@ -1474,7 +1862,7 @@ async function downloadAllZip() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'is-authenticated': isAuthenticated }">
     <AppHeader
       :auth-ready="authReady"
       :user="authUser"
@@ -1577,7 +1965,7 @@ async function downloadAllZip() {
             :authenticated="isAuthenticated"
             :favorites="favorites"
             @restore="restoreHistory"
-            @reGenerate="handleReGenerate"
+            @adjust="openRefine"
             @remove="deleteHistory"
             @clear="clearHistory"
             @showResult="scrollToSection('result-panel')"
@@ -1594,6 +1982,14 @@ async function downloadAllZip() {
     </main>
 
     <HomeFloatingActions />
+
+    <RefineDialog
+      v-if="refineRecord"
+      :record="refineRecord"
+      :busy="refineBusy"
+      @close="!refineBusy && (refineRecord = null)"
+      @confirm="handleRefineConfirm"
+    />
 
     <AuthDialog v-if="authDialogOpen" v-model:mode="authMode" @close="authDialogOpen = false" @authenticated="handleAuthenticated" />
     <UserPanel v-if="userPanelOpen && authUser" :user="authUser" @close="userPanelOpen = false" @balance-updated="handleBalanceUpdated" />

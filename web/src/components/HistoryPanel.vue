@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   restore: [record: ServerHistoryRecord];
-  reGenerate: [record: ServerHistoryRecord];
+  adjust: [record: ServerHistoryRecord];
   remove: [record: ServerHistoryRecord];
   clear: [];
   showResult: [];
@@ -71,7 +71,7 @@ const emit = defineEmits<{
 
         <div class="history-actions">
           <button type="button" @click="emit('restore', record)">恢复</button>
-          <button type="button" class="regenerate" @click="emit('reGenerate', record)">再次生成</button>
+          <button type="button" class="regenerate" @click="emit('adjust', record)">再次调整</button>
           <button type="button" class="favorite" @click="emit('toggleFavorite', record.id)">
             {{ props.favorites.has(record.id) ? "★ 已收藏" : "☆ 收藏" }}
           </button>

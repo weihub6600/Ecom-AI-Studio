@@ -38,6 +38,7 @@ export interface HistoryRequestContext {
 }
 
 export interface StoredHistoryRecord extends Omit<HistorySaveInput, "clientId"> {
+  sourceImages?: HistoryImage[];
   id: string;
   createdAt: string;
   /** 旧版记录可能没有 clientId；新记录始终会写入。 */
@@ -124,6 +125,52 @@ export function parseHistorySaveInput(value: unknown): HistorySaveInput {
   };
 }
 
+
+export function parseHistorySourceImages(value: unknown): HistoryImage[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 32) {
+    throw new HistoryValidationError("sourceImages 必须包含 1 至 32 张图片");
+  }
+
+  return value.map((item, index) => {
+    const image = asObject(item, `sourceImages[${index}] 格式不正确`);
+    const url = readRequiredString(
+      image.url,
+      `sourceImages[${index}].url`,
+      15_000_000
+    );
+
+    if (
+      !url.startsWith("data:image/") &&
+      !/^https?:\/\//i.test(url)
+    ) {
+      throw new HistoryValidationError(
+        `sourceImages[${index}].url 必须是图片 data URL 或 HTTP(S) URL`
+      );
+    }
+
+    const width = readOptionalPositiveInteger(
+      image.width,
+      `sourceImages[${index}].width`
+    );
+    const height = readOptionalPositiveInteger(
+      image.height,
+      `sourceImages[${index}].height`
+    );
+    const mimeType = readOptionalString(
+      image.mimeType,
+      `sourceImages[${index}].mimeType`,
+      120
+    );
+
+    return {
+      url,
+      width,
+      height,
+      mimeType
+    };
+  });
+}
+
 export function createHistoryService(options: HistoryServiceOptions) {
   const { pool } = options.database;
   const dataDir = path.resolve(options.dataDir);
@@ -138,6 +185,7 @@ export function createHistoryService(options: HistoryServiceOptions) {
       pool,
       options.database.databaseName
     );
+    await ensureHistorySourceImageSchema(pool);
   }
 
   async function list(limit = 20, clientId?: string): Promise<StoredHistoryRecord[]> {
@@ -162,7 +210,9 @@ export function createHistoryService(options: HistoryServiceOptions) {
        ORDER BY h.created_at DESC, i.position_index ASC`,
       values
     );
-    return groupHistoryRows(rows);
+    const records = groupHistoryRows(rows);
+    await attachSourceImages(records);
+    return records;
   }
 
   async function listAll(
@@ -194,7 +244,9 @@ export function createHistoryService(options: HistoryServiceOptions) {
         [clientId, clientId]
       );
 
-    return groupHistoryRows(rows);
+    const records = groupHistoryRows(rows);
+    await attachSourceImages(records);
+    return records;
   }
 
   async function getById(
@@ -245,9 +297,11 @@ export function createHistoryService(options: HistoryServiceOptions) {
         values
       );
 
-    return groupHistoryRows(
+    const records = groupHistoryRows(
       rows
-    )[0];
+    );
+    await attachSourceImages(records);
+    return records[0];
   }
 
   async function getByGenerationTaskId(
@@ -287,7 +341,191 @@ export function createHistoryService(options: HistoryServiceOptions) {
         values
       );
 
-    return groupHistoryRows(rows)[0];
+    const records = groupHistoryRows(rows);
+    await attachSourceImages(records);
+    return records[0];
+  }
+
+  async function attachSourceImages(
+    records: StoredHistoryRecord[]
+  ): Promise<void> {
+    if (!records.length) return;
+
+    const ids = records.map((record) => record.id);
+    const placeholders = ids.map(() => "?").join(",");
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT
+         history_id,
+         position_index,
+         image_url,
+         mime_type
+       FROM app_history_source_images
+       WHERE history_id IN (${placeholders})
+       ORDER BY history_id ASC, position_index ASC`,
+      ids
+    );
+
+    const byHistory = new Map<string, HistoryImage[]>();
+
+    for (const row of rows) {
+      const historyId = String(row.history_id);
+      const images = byHistory.get(historyId) || [];
+      images.push({
+        url: String(row.image_url),
+        mimeType:
+          typeof row.mime_type === "string"
+            ? row.mime_type
+            : undefined
+      });
+      byHistory.set(historyId, images);
+    }
+
+    for (const record of records) {
+      record.sourceImages =
+        byHistory.get(record.id) || [];
+    }
+  }
+
+  async function saveSourceImages(
+    historyId: string,
+    clientId: string,
+    sourceImages: HistoryImage[],
+    context: HistoryRequestContext = {}
+  ): Promise<StoredHistoryRecord> {
+    return withWriteLock(async () => {
+      const existing = await getById(
+        historyId,
+        clientId
+      );
+
+      if (!existing) {
+        throw new HistoryValidationError(
+          "历史记录不存在"
+        );
+      }
+
+      if (
+        existing.sourceImages &&
+        existing.sourceImages.length > 0
+      ) {
+        return existing;
+      }
+
+      const savedFiles: string[] = [];
+
+      try {
+        const createdAt = new Date();
+        const timestamp =
+          formatLocalDateTimeStamp(createdAt);
+        const ownerUsername =
+          normalizeOutputOwner(
+            context.ownerUsername
+          );
+        let nextSequence =
+          await findNextOutputSequence(
+            generatedDir,
+            ownerUsername,
+            timestamp
+          );
+
+        const storedRows: Array<{
+          fileName: string;
+          url: string;
+          mimeType: string;
+        }> = [];
+
+        for (
+          let index = 0;
+          index < sourceImages.length;
+          index += 1
+        ) {
+          const source = sourceImages[index];
+          if (!source) continue;
+
+          const fileBaseName =
+            `${ownerUsername}_${timestamp}_${String(nextSequence).padStart(3, "0")}`;
+          nextSequence += 1;
+
+          const stored =
+            await downloadAndStoreImage(
+              source.url,
+              fileBaseName,
+              generatedDir,
+              maxImageBytes,
+              downloadTimeoutMs
+            );
+
+          savedFiles.push(stored.fileName);
+          storedRows.push({
+            fileName: stored.fileName,
+            url:
+              `/generated/${encodeURIComponent(stored.fileName)}`,
+            mimeType: stored.mimeType
+          });
+        }
+
+        if (!storedRows.length) {
+          throw new HistoryValidationError(
+            "没有可保存的原始参考素材"
+          );
+        }
+
+        await withTransaction(
+          pool,
+          async (connection) => {
+            for (
+              let index = 0;
+              index < storedRows.length;
+              index += 1
+            ) {
+              const item = storedRows[index];
+              if (!item) continue;
+
+              await connection.execute(
+                `INSERT INTO app_history_source_images
+                  (id, history_id, position_index, file_name, image_url, mime_type, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  randomUUID(),
+                  historyId,
+                  index,
+                  item.fileName,
+                  item.url,
+                  item.mimeType,
+                  createdAt
+                ]
+              );
+            }
+          }
+        );
+
+        const saved = await getById(
+          historyId,
+          clientId
+        );
+
+        if (!saved) {
+          throw new Error(
+            "原始素材保存后无法读取历史记录"
+          );
+        }
+
+        return saved;
+      } catch (error) {
+        await Promise.all(
+          savedFiles.map((fileName) =>
+            rm(
+              path.join(
+                generatedDir,
+                fileName
+              ),
+              { force: true }
+            )
+          )
+        );
+        throw error;
+      }
+    });
   }
 
   async function save(input: HistorySaveInput, context: HistoryRequestContext = {}): Promise<StoredHistoryRecord> {
@@ -437,12 +675,29 @@ export function createHistoryService(options: HistoryServiceOptions) {
     if (!normalized) return false;
     if (isAdmin) return true;
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT i.id
-       FROM app_history_images i
-       INNER JOIN app_history_records h ON h.id = i.history_id
-       WHERE i.file_name = ? AND (h.owner_user_id = ? OR h.client_id = ?)
+      `SELECT h.id
+       FROM app_history_records h
+       WHERE
+         h.deleted_at IS NULL
+         AND (h.owner_user_id = ? OR h.client_id = ?)
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM app_history_images i
+             WHERE
+               i.history_id = h.id
+               AND i.file_name = ?
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM app_history_source_images s
+             WHERE
+               s.history_id = h.id
+               AND s.file_name = ?
+           )
+         )
        LIMIT 1`,
-      [normalized, userId, userId]
+      [userId, userId, normalized, normalized]
     );
     return rows.length > 0;
   }
@@ -462,6 +717,7 @@ export function createHistoryService(options: HistoryServiceOptions) {
     getById,
     getByGenerationTaskId,
     save,
+    saveSourceImages,
     remove,
     clear,
     resolveGeneratedFile,
@@ -475,7 +731,7 @@ function groupHistoryRows(rows: RowDataPacket[]): StoredHistoryRecord[] {
     const id = String(row.id);
     let record = records.get(id);
     if (!record) {
-      record = {
+      const createdRecord: StoredHistoryRecord = {
         id,
         createdAt: mysqlDateToIso(row.created_at) || new Date().toISOString(),
         clientId: typeof row.client_id === "string" ? row.client_id : undefined,
@@ -493,10 +749,13 @@ function groupHistoryRows(rows: RowDataPacket[]): StoredHistoryRecord[] {
         size: String(row.size),
         durationMs: row.duration_ms === null ? undefined : Number(row.duration_ms),
         cost: row.cost === null ? undefined : Number(row.cost),
-        images: []
+        images: [],
+        sourceImages: []
       };
-      records.set(id, record);
+      records.set(id, createdRecord);
+      record = createdRecord;
     }
+
     if (row.image_id) {
       record.images.push({
         url: String(row.image_url),
@@ -847,6 +1106,26 @@ function normalizeAuditText(value: string | undefined, maxLength: number): strin
   if (!value) return undefined;
   const normalized = value.trim();
   return normalized ? normalized.slice(0, maxLength) : undefined;
+}
+
+
+async function ensureHistorySourceImageSchema(
+  pool: Pool
+): Promise<void> {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS app_history_source_images (
+      id CHAR(36) NOT NULL PRIMARY KEY,
+      history_id CHAR(36) NOT NULL,
+      position_index INT UNSIGNED NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      image_url VARCHAR(2048) NOT NULL,
+      mime_type VARCHAR(120) NULL,
+      created_at DATETIME(3) NOT NULL,
+      UNIQUE KEY uq_app_history_source_position (history_id, position_index),
+      KEY idx_app_history_source_history (history_id),
+      KEY idx_app_history_source_file (file_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  );
 }
 
 

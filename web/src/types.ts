@@ -97,6 +97,7 @@ export interface ServerHistoryRecord {
   durationMs?: number;
   cost?: number;
   images: GeneratedImage[];
+  sourceImages?: GeneratedImage[];
 }
 
 export interface GenerationTaskRequestSnapshot {

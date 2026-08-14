@@ -211,7 +211,19 @@ export async function enforceHistoryRetention(
          h.deleted_at,
          i.file_name
        FROM app_history_records h
-       LEFT JOIN app_history_images i
+       LEFT JOIN (
+         SELECT
+           history_id,
+           position_index,
+           file_name
+         FROM app_history_images
+         UNION ALL
+         SELECT
+           history_id,
+           position_index + 1000000 AS position_index,
+           file_name
+         FROM app_history_source_images
+       ) i
          ON i.history_id = h.id
        WHERE ${where.join("\n         AND ")}
        ORDER BY
@@ -382,6 +394,12 @@ export async function enforceHistoryRetention(
         await connection.query(
           `UPDATE app_generation_tasks
            SET history_id = NULL
+           WHERE history_id IN (${placeholders})`,
+          ids
+        );
+
+        await connection.query(
+          `DELETE FROM app_history_source_images
            WHERE history_id IN (${placeholders})`,
           ids
         );

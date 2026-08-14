@@ -2484,3 +2484,267 @@ body {
 .header-v32-message-menu{
   z-index:260 !important;
 }
+
+
+/* V14_3_1_VIEWPORT_FIT
+   Desktop authenticated workspace fits inside the viewport.
+   The page itself no longer needs vertical scrolling; dense modules scroll internally only when necessary. */
+@media (min-width: 1121px) and (min-height: 720px) {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body:has(.app-shell.is-authenticated) {
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated {
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated .topbar,
+  .app-shell.is-authenticated > .announcement-topbar-wrap {
+    flex: 0 0 auto;
+  }
+
+  .app-shell.is-authenticated .workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: min(1540px, calc(100% - 32px));
+    padding: 12px 0 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated .intro--collapsed {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+  }
+
+  .app-shell.is-authenticated .alert,
+  .app-shell.is-authenticated .auth-guard-notice {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+  }
+
+  .app-shell.is-authenticated .studio-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: minmax(420px, .92fr) minmax(560px, 1.08fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .app-shell.is-authenticated .control-panel {
+    height: 100%;
+    min-height: 0;
+    padding: 18px 19px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .app-shell.is-authenticated .control-panel .panel-heading {
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+  }
+
+  .app-shell.is-authenticated .control-panel .field-block {
+    margin-bottom: 12px;
+  }
+
+  .app-shell.is-authenticated .provider-segmented button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .app-shell.is-authenticated .model-card {
+    min-height: 60px;
+    padding: 10px 12px;
+  }
+
+  .app-shell.is-authenticated .mode-selector button {
+    min-height: 64px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .app-shell.is-authenticated .drop-zone {
+    min-height: 86px;
+  }
+
+  .app-shell.is-authenticated .drop-zone.compact {
+    min-height: 72px;
+  }
+
+  .app-shell.is-authenticated textarea {
+    min-height: 88px;
+  }
+
+  .app-shell.is-authenticated .template-row {
+    margin-top: 7px;
+  }
+
+  .app-shell.is-authenticated .template-row button {
+    min-height: 28px;
+    padding: 6px 10px;
+  }
+
+  .app-shell.is-authenticated .size-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .app-shell.is-authenticated .size-card {
+    min-height: 58px;
+    padding: 7px 8px;
+    grid-template-columns: 30px minmax(0, 1fr) 16px;
+    gap: 7px;
+  }
+
+  .app-shell.is-authenticated .size-preview {
+    width: 30px;
+    height: 38px;
+  }
+
+  .app-shell.is-authenticated .size-preview i {
+    max-width: 20px;
+    max-height: 24px;
+  }
+
+  .app-shell.is-authenticated .generate-button {
+    min-height: 44px;
+  }
+
+  .app-shell.is-authenticated .result-column {
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    display: grid;
+    grid-template-rows: minmax(0, 1.38fr) minmax(205px, .62fr) auto;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated .preview-panel {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: 18px;
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated .preview-panel .panel-heading {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .app-shell.is-authenticated .generation-stage,
+  .app-shell.is-authenticated .result-gallery {
+    min-height: 0;
+  }
+
+  .app-shell.is-authenticated .generation-stage {
+    height: 100%;
+    padding: 18px;
+  }
+
+  .app-shell.is-authenticated .preview-art {
+    width: min(310px, 66%);
+  }
+
+  .app-shell.is-authenticated .result-card > img {
+    max-height: min(46dvh, 470px);
+  }
+
+  .app-shell.is-authenticated .model-summary {
+    margin-top: 10px;
+  }
+
+  .app-shell.is-authenticated .model-summary div {
+    min-height: 50px;
+    padding: 9px 12px;
+  }
+
+  .app-shell.is-authenticated .history-panel {
+    height: 100%;
+    min-height: 0;
+    margin-top: 0;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-shell.is-authenticated .history-heading {
+    flex: 0 0 auto;
+    margin-bottom: 9px;
+    padding-bottom: 9px;
+  }
+
+  .app-shell.is-authenticated .history-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    gap: 7px;
+    padding-right: 2px;
+  }
+
+  .app-shell.is-authenticated .history-card {
+    grid-template-columns: 82px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 7px;
+  }
+
+  .app-shell.is-authenticated .history-thumb {
+    width: 82px;
+    height: 61px;
+  }
+
+  .app-shell.is-authenticated .history-copy p {
+    margin: 5px 0 4px;
+    -webkit-line-clamp: 1;
+  }
+
+  .app-shell.is-authenticated .history-actions {
+    gap: 4px;
+  }
+
+  .app-shell.is-authenticated .history-actions button {
+    padding: 5px 7px;
+  }
+
+  .app-shell.is-authenticated .history-more-link {
+    flex: 0 0 auto;
+    margin-top: 0;
+    min-height: 30px;
+  }
+}
+
+@media (min-width: 1121px) and (max-height: 820px) {
+  .app-shell.is-authenticated .intro--collapsed {
+    display: none;
+  }
+
+  .app-shell.is-authenticated .workspace {
+    padding-top: 8px;
+  }
+
+  .app-shell.is-authenticated .result-column {
+    grid-template-rows: minmax(0, 1.5fr) minmax(176px, .5fr) auto;
+  }
+
+  .app-shell.is-authenticated .history-heading p {
+    display: none;
+  }
+}
+

@@ -208,6 +208,16 @@ export function createApp(
   );
 
   app.use(
+    "/api/history",
+    express.json({
+      limit: readJsonLimit(
+        "HISTORY_JSON_LIMIT",
+        "20mb"
+      )
+    })
+  );
+
+  app.use(
     "/api/batches",
     express.json({
       limit: readJsonLimit(
