@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// V14_4_2_TOPBAR_DIRECT_CLOSE
 import {
   computed,
   onMounted,
@@ -476,15 +477,6 @@ function openLink(
   );
 }
 
-function toggleCloseMenu(
-  item: Announcement
-) {
-  closeMenuId.value =
-    closeMenuId.value ===
-      item.id
-      ? ""
-      : item.id;
-}
 </script>
 
 <template>
@@ -558,7 +550,7 @@ function toggleCloseMenu(
           class="announcement-close-button"
           aria-label="关闭公告"
           @click="
-            toggleCloseMenu(
+            dismissThisSession(
               topbarItem
             )
           "
@@ -568,36 +560,6 @@ function toggleCloseMenu(
             :stroke-width="2.2"
           />
         </button>
-
-        <div
-          v-if="
-            closeMenuId ===
-            topbarItem.id
-          "
-          class="announcement-close-menu"
-        >
-          <button
-            type="button"
-            @click="
-              dismissThisSession(
-                topbarItem
-              )
-            "
-          >
-            本次不提醒
-          </button>
-
-          <button
-            type="button"
-            @click="
-              dismissToday(
-                topbarItem
-              )
-            "
-          >
-            今日不提醒
-          </button>
-        </div>
       </div>
     </article>
   </div>
