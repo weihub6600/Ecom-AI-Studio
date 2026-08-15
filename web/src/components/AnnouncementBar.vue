@@ -651,13 +651,26 @@ function toggleCloseMenu(
         </div>
       </header>
 
-      <section class="announcement-popup-content">
+      <section
+        class="announcement-popup-content"
+        tabindex="0"
+        aria-label="公告正文，可滚动查看完整内容"
+      >
         <AnnouncementRichText
           :content="popupItem.content"
         />
       </section>
 
-      <div class="announcement-popup-meta">
+      <div
+        v-if="
+          (
+            popupItem.countdownEnabled &&
+            popupItem.endsAt
+          ) ||
+          popupItem.linkUrl
+        "
+        class="announcement-popup-meta"
+      >
         <div
           v-if="
             popupItem.countdownEnabled &&
@@ -1748,4 +1761,83 @@ function toggleCloseMenu(
 .announcement-popup-content :deep(.announcement-rich-text){color:#484e5e;font-size:15px;font-weight:550;line-height:1.85;text-align:left}
 .announcement-popup-content :deep(.announcement-rich-text h3),.announcement-popup-content :deep(.announcement-rich-text h4),.announcement-popup-content :deep(.announcement-rich-text h5){color:#343949}
 .announcement-popup-content :deep(.announcement-rich-text a){color:#6654bd}
+</style>
+
+
+<style scoped>
+/* V14_4_1_ANNOUNCEMENT_SCROLL_OPTIMIZATION */
+.announcement-popup{
+  display:flex;
+  flex-direction:column;
+  max-height:calc(100vh - 48px);
+  max-height:calc(100dvh - 48px);
+}
+
+.announcement-popup-accent,
+.announcement-popup-head,
+.announcement-popup-meta,
+.announcement-popup-footer{
+  flex:0 0 auto;
+}
+
+.announcement-popup-content{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:min(310px,38vh);
+  max-height:min(310px,38dvh);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:#c9c3e5 transparent;
+}
+
+.announcement-popup-content::-webkit-scrollbar{
+  width:6px;
+}
+
+.announcement-popup-content::-webkit-scrollbar-track{
+  background:transparent;
+}
+
+.announcement-popup-content::-webkit-scrollbar-thumb{
+  border-radius:999px;
+  background:#c9c3e5;
+}
+
+.announcement-popup-content::-webkit-scrollbar-thumb:hover{
+  background:#aaa1d7;
+}
+
+.announcement-popup-content:focus{
+  outline:none;
+}
+
+.announcement-popup-content:focus-visible{
+  border-color:#cbc4ed;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    0 0 0 3px rgba(105,84,190,.08);
+}
+
+@media(max-width:640px){
+  .announcement-popup{
+    max-height:calc(100vh - 24px);
+    max-height:calc(100dvh - 24px);
+  }
+
+  .announcement-popup-content{
+    max-height:min(260px,36vh);
+    max-height:min(260px,36dvh);
+  }
+}
+</style>
+
+
+<style scoped>
+/* V14_4_1_1_ANNOUNCEMENT_EMPTY_META_FIX */
+.announcement-popup-content + .announcement-popup-footer{
+  margin-top:14px;
+}
 </style>
