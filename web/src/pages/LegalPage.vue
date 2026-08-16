@@ -245,7 +245,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="v15-legal-page v1501-home">
+  <div class="v15-legal-page">
     <header class="v15-home-nav">
       <a class="v15-home-brand" href="/">
         <span>Z</span>

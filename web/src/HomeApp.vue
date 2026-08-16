@@ -79,7 +79,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="v15-home v1501-home v1503-home">
+  <div class="v15-home">
     <header class="v15-home-nav">
       <a class="v15-home-brand" href="/">
         <span>Z</span>
