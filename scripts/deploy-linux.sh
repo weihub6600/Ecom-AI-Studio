@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-BRANCH="${1:-20260728}"
+BRANCH="${1:-20260816}"
 APP_NAME="${PM2_APP_NAME:-zhe-ai}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

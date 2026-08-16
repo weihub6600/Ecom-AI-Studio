@@ -17,7 +17,7 @@ import type {
   UsageRecord
 } from "./types";
 import { formatDate, formatDuration, formatPoints } from "./utils/format";
-import ApiProviderManager from "./components/ApiProviderManager.vue";
+import CustomProviderManager from "./components/CustomProviderManager.vue";
 import PromptOptimizerManager from "./components/PromptOptimizerManager.vue";
 import AdminAnnouncementManager from "./components/AdminAnnouncementManager.vue";
 import AdminGalleryManager from "./components/AdminGalleryManager.vue";
@@ -564,7 +564,7 @@ function auditLabel(action: string) {
         v-else-if="activeSection === 'providers'"
         class="admin-v10-section"
       >
-        <ApiProviderManager />
+        <CustomProviderManager />
       </section>
 
 <section v-else class="admin-v10-section">

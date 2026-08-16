@@ -1,7 +1,6 @@
 <script setup lang="ts">
 // V14_3_1_3_1_PASS_MODELS_TO_HISTORY
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import UserPanel from "./UserPanel.vue";
 import AnnouncementBar from "./components/AnnouncementBar.vue";
 import AppHeader from "./components/AppHeader.vue";
 import HomeFloatingActions from "./components/HomeFloatingActions.vue";
@@ -11,7 +10,6 @@ import GenerationControls from "./components/GenerationControls.vue";
 import ResultPanel from "./components/ResultPanel.vue";
 import HistoryPanel from "./components/HistoryPanel.vue";
 import RefineDialog from "./components/RefineDialog.vue";
-import TaskCenter from "./components/TaskCenter.vue";
 import { ApiError, apiRequest, jsonRequest } from "./api/client";
 import type {
   AuthUser,
@@ -22,11 +20,7 @@ import type {
   OutputSize,
   ProviderId,
   ServerHistoryRecord,
-  UploadImage,
-  GenerationTask,
-  GenerationTaskPagination,
-  GenerationTaskQueryState,
-  GenerationTaskSummary
+  UploadImage
 } from "./types";
 import { formatSizeTitle, greatestCommonDivisor, providerDisplayName } from "./utils/format";
 
@@ -73,40 +67,6 @@ const authUser = ref<AuthUser | null>(null);
 const authReady = ref(false);
 const authDialogOpen = ref(false);
 const authMode = ref<"login" | "register">("login");
-const userPanelOpen = ref(false);
-const taskRecords = ref<GenerationTask[]>([]);
-
-const taskPagination =
-  ref<GenerationTaskPagination>({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 1
-  });
-
-const taskSummary =
-  ref<GenerationTaskSummary>({
-    total: 0,
-    active: 0,
-    success: 0,
-    failed: 0,
-    cancelled: 0
-  });
-
-const taskQuery =
-  ref<GenerationTaskQueryState>({
-    status: "all",
-    provider: "all",
-    search: "",
-    page: 1,
-    pageSize: 20
-  });
-
-let taskRefreshTimer:
-  number |
-  undefined;
-
-let lastHiddenTaskRefreshAt = 0;
 const generationProgress = ref(0);
 const generationPhase = ref<GenerationPhase>("queue");
 let progressTimer: number | undefined;
@@ -217,7 +177,6 @@ function handleGlobalKeydown(event: KeyboardEvent) {
       return;
     }
     if (authDialogOpen.value) { authDialogOpen.value = false; return; }
-    if (userPanelOpen.value) { userPanelOpen.value = false; return; }
     if (errorMessage.value) { errorMessage.value = ""; return; }
   }
 }
@@ -250,13 +209,11 @@ onMounted(async () => {
   }
   syncIntroCollapsedState();
   if (authUser.value) {
-    await Promise.all([loadHistory(true), loadTasks()]);
-    startTaskRefresh();
+    await loadHistory(true);
   }
 });
 
 onUnmounted(() => {
-  stopTaskRefresh();
   stopGenerationProgress();
   window.removeEventListener(
     "keydown",
@@ -296,8 +253,7 @@ async function handleAuthenticated(user: AuthUser) {
   authUser.value = user;
   authDialogOpen.value = false;
   syncIntroCollapsedState();
-  await Promise.all([loadHistory(true), loadTasks()]);
-  startTaskRefresh();
+  await loadHistory(true);
 }
 
 async function logout() {
@@ -307,11 +263,8 @@ async function logout() {
     // 即使网络中断，也清理当前页面状态。
   } finally {
     authUser.value = null;
-    userPanelOpen.value = false;
     historyRecords.value = [];
-    taskRecords.value = [];
-    stopTaskRefresh();
-    activeHistoryId.value = null;
+      activeHistoryId.value = null;
     results.value = [];
     resultDimensions.value = {};
     generationMeta.value = null;
@@ -549,342 +502,6 @@ async function loadModels(
   }
 }
 
-async function loadTasks(
-  options: {
-    resetPage?: boolean;
-  } = {}
-) {
-  if (!authUser.value) {
-    taskRecords.value = [];
-    taskPagination.value = {
-      page: 1,
-      pageSize:
-        taskQuery.value
-          .pageSize,
-      total: 0,
-      totalPages: 1
-    };
-    taskSummary.value = {
-      total: 0,
-      active: 0,
-      success: 0,
-      failed: 0,
-      cancelled: 0
-    };
-    return;
-  }
-
-  if (options.resetPage) {
-    taskQuery.value = {
-      ...taskQuery.value,
-      page: 1
-    };
-  }
-
-  try {
-    const params =
-      new URLSearchParams({
-        page:
-          String(
-            taskQuery.value.page
-          ),
-        pageSize:
-          String(
-            taskQuery.value
-              .pageSize
-          ),
-        status:
-          taskQuery.value.status
-      });
-
-    if (
-      taskQuery.value.provider !==
-      "all"
-    ) {
-      params.set(
-        "provider",
-        taskQuery.value.provider
-      );
-    }
-
-    if (
-      taskQuery.value.search
-    ) {
-      params.set(
-        "search",
-        taskQuery.value.search
-      );
-    }
-
-    const data =
-      await apiRequest<{
-        tasks:
-          GenerationTask[];
-        pagination:
-          GenerationTaskPagination;
-        summary:
-          GenerationTaskSummary;
-      }>(
-        `/api/account/tasks?${params.toString()}`
-      );
-
-    taskRecords.value =
-      data.tasks || [];
-
-    taskPagination.value =
-      data.pagination;
-
-    taskSummary.value =
-      data.summary;
-
-    if (
-      data.pagination.page !==
-      taskQuery.value.page
-    ) {
-      taskQuery.value = {
-        ...taskQuery.value,
-        page:
-          data.pagination.page
-      };
-    }
-
-    if (
-      data.summary.active > 0
-    ) {
-      startTaskRefresh();
-    } else {
-      stopTaskRefresh();
-    }
-  } catch (error) {
-    handleProtectedApiError(
-      error,
-      "读取生成任务失败"
-    );
-  }
-}
-
-function handleTaskQueryChange(
-  query:
-    GenerationTaskQueryState
-) {
-  taskQuery.value = query;
-  void loadTasks({
-    resetPage: false
-  });
-}
-
-function handleTaskPageChange(
-  page: number
-) {
-  taskQuery.value = {
-    ...taskQuery.value,
-    page
-  };
-
-  void loadTasks({
-    resetPage: false
-  });
-}
-
-function startTaskRefresh() {
-  if (taskRefreshTimer || !authUser.value) return;
-  taskRefreshTimer =
-    window.setInterval(() => {
-      if (!document.hidden) {
-        void loadTasks();
-        return;
-      }
-
-      const now = Date.now();
-
-      if (
-        now -
-          lastHiddenTaskRefreshAt >=
-        15_000
-      ) {
-        lastHiddenTaskRefreshAt =
-          now;
-        void loadTasks();
-      }
-    }, 3000);
-}
-
-function stopTaskRefresh() {
-  if (!taskRefreshTimer) return;
-  window.clearInterval(taskRefreshTimer);
-  taskRefreshTimer = undefined;
-}
-
-async function retryUsageTask(
-  record: GenerationTask
-) {
-  const snapshot =
-    record.requestSnapshot || {};
-
-  const provider =
-    snapshot.provider;
-  const modelId =
-    snapshot.model || record.model;
-
-  if (
-    provider === "lingke" ||
-    provider === "grsai" ||
-    provider === "nanobanana"
-  ) {
-    selectedProviderId.value = provider;
-  }
-
-  await nextTick();
-
-  const model = models.value.find(
-    (item) => item.id === modelId
-  );
-
-  if (model) {
-    selectedProviderId.value = model.provider;
-    await nextTick();
-    selectedModelId.value = model.id;
-  }
-
-  generationMode.value =
-    snapshot.operation === "text-to-image"
-      ? "text-to-image"
-      : record.operation;
-
-  prompt.value =
-    snapshot.prompt ||
-    record.prompt ||
-    prompt.value;
-
-  if (
-    typeof snapshot.negativePrompt ===
-    "string"
-  ) {
-    negativePrompt.value =
-      snapshot.negativePrompt;
-  }
-
-  outputSize.value =
-    snapshot.size ||
-    record.size;
-
-  count.value = Math.max(
-    1,
-    typeof snapshot.count === "number"
-      ? Math.trunc(snapshot.count)
-      : record.requestedImageCount || 1
-  );
-
-  seed.value =
-    typeof snapshot.seed === "number"
-      ? snapshot.seed
-      : undefined;
-
-  if (
-    generationMode.value === "image-edit" &&
-    record.thumbnailUrl
-  ) {
-    uploads.value = [{
-      id: `retry-${record.id}`,
-      name: "task-thumbnail.jpg",
-      mimeType:
-        record.thumbnailUrl.startsWith(
-          "data:image/png"
-        )
-          ? "image/png"
-          : "image/jpeg",
-      dataUrl: record.thumbnailUrl,
-      size: record.thumbnailUrl.length
-    }];
-  }
-
-  window.requestAnimationFrame(() =>
-    document
-      .querySelector(".generation-panel")
-      ?.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      })
-  );
-}
-
-async function viewUsageTask(
-  record: GenerationTask
-) {
-  let history =
-    record.historyId
-      ? historyRecords.value
-          .find(
-            (item) =>
-              item.id ===
-              record.historyId
-          )
-      : undefined;
-
-  if (
-    !history &&
-    record.historyId
-  ) {
-    try {
-      const detail =
-        await apiRequest<{
-          record:
-            ServerHistoryRecord;
-        }>(
-          `/api/history/${encodeURIComponent(record.historyId)}`
-        );
-
-      history =
-        detail.record;
-
-      historyRecords.value = [
-        detail.record,
-        ...historyRecords.value
-          .filter(
-            (item) =>
-              item.id !==
-              detail.record.id
-          )
-      ].slice(
-        0,
-        HISTORY_LIMIT
-      );
-    } catch (error) {
-      handleProtectedApiError(
-        error,
-        "读取任务结果失败"
-      );
-      return;
-    }
-  }
-
-  if (!history) {
-    history =
-      historyRecords.value.find(
-        (item) =>
-          item.model ===
-            record.model &&
-          item.prompt ===
-            (record.prompt || "") &&
-          Math.abs(
-            new Date(
-              item.createdAt
-            ).getTime() -
-            new Date(
-              record.createdAt
-            ).getTime()
-          ) <
-            10 * 60 * 1000
-      );
-  }
-
-  if (history) {
-    await restoreHistory(
-      history
-    );
-  }
-}
-
 async function loadHistory(restoreLatest = false) {
   if (!authUser.value) {
     historyRecords.value = [];
@@ -963,7 +580,6 @@ async function acceptSavedHistory(
       record.images
   };
 
-  await loadTasks();
 }
 
 async function saveGenerationToServer(
@@ -1002,7 +618,6 @@ async function saveGenerationToServer(
       );
     }
 
-    await loadTasks();
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     if (error instanceof ApiError && error.status === 401) {
@@ -1529,7 +1144,6 @@ async function generate() {
       handleBalanceUpdated(response.credits);
     }
 
-    await loadTasks();
 
 
     let taskPayload: {
@@ -1628,7 +1242,6 @@ async function generate() {
     stopGenerationProgress();
     loading.value = false;
     pollingProgress.value = "";
-    await loadTasks();
   }
 }
 
@@ -1957,19 +1570,6 @@ async function downloadAllZip() {
             @show-history="scrollToSection('history-panel')"
             @update:lightbox-index="lightboxIndex = $event"
           />
-          <TaskCenter v-if="false"
-            :records="taskRecords"
-            :histories="historyRecords"
-            :authenticated="isAuthenticated"
-            :pagination="taskPagination"
-            :summary="taskSummary"
-            :query="taskQuery"
-            @retry="retryUsageTask"
-            @view="viewUsageTask"
-            @refresh="loadTasks"
-            @query-change="handleTaskQueryChange"
-            @page-change="handleTaskPageChange"
-          />
           <HistoryPanel
             :records="historyRecords"
             :models="models"
@@ -2004,7 +1604,6 @@ async function downloadAllZip() {
     />
 
     <AuthDialog v-if="authDialogOpen" v-model:mode="authMode" @close="authDialogOpen = false" @authenticated="handleAuthenticated" />
-    <UserPanel v-if="userPanelOpen && authUser" :user="authUser" @close="userPanelOpen = false" @balance-updated="handleBalanceUpdated" />
   </div>
 </template>
 
