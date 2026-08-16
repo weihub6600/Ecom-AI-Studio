@@ -1,7 +1,0 @@
-{
-  "patch": "V15.0.3.2-remove-legal-template-note-20260816",
-  "target": "E:\\Code\\Ecom-AI-Studio-git",
-  "files": {
-    "web/src/pages/LegalPage.vue": true
-  }
-}
