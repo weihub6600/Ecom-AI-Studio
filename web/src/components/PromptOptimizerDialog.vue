@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import PlatformModal from "./PlatformModal.vue";
 import { apiRequest, jsonRequest } from "../api/client";
 
 type OptimizeMode = "standard" | "ecommerce" | "concise";
@@ -77,9 +78,17 @@ function applyResult() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="props.open" class="optimizer-mask" @click.self="emit('close')">
-      <section class="optimizer-dialog" role="dialog" aria-modal="true">
+  <PlatformModal
+    :open="props.open"
+    layer="raised"
+    padding="24px"
+    mobile-padding="12px"
+    background="rgba(23,25,35,.42)"
+    blur="8px"
+    close-event="click"
+    @close="emit('close')"
+  >
+<section class="optimizer-dialog" role="dialog" aria-modal="true">
         <header>
           <div>
             <span>AI PROMPT OPTIMIZER</span>
@@ -130,12 +139,10 @@ function applyResult() {
           </button>
         </footer>
       </section>
-    </div>
-  </Teleport>
+  </PlatformModal>
 </template>
 
 <style scoped>
-.optimizer-mask{position:fixed;inset:0;z-index:var(--v15-z-modal-raised);display:grid;place-items:center;padding:24px;background:rgba(23,25,35,.42);backdrop-filter:blur(8px)}
 .optimizer-dialog{width:min(880px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;border:1px solid #dedfe7;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(24,28,45,.2)}
 .optimizer-dialog>header{display:flex;justify-content:space-between;gap:18px;padding:24px 26px 18px;border-bottom:1px solid #ececf2}
 .optimizer-dialog>header>div{display:grid;gap:5px}
@@ -157,5 +164,5 @@ function applyResult() {
 .optimizer-dialog>footer button{min-height:38px;padding:0 16px;border-radius:10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
 .optimizer-dialog>footer button:disabled{opacity:.46;cursor:not-allowed}.soft{border:1px solid #e0e1e8;background:#fff;color:#686e7b}
 .secondary{border:1px solid #cfc8ef;background:#f6f3ff;color:#6250bc}.primary{border:1px solid #6654bd;background:#6654bd;color:#fff}
-@media(max-width:760px){.optimizer-mask{padding:12px}.mode-grid,.compare-grid{grid-template-columns:1fr}}
+@media(max-width:760px){.mode-grid,.compare-grid{grid-template-columns:1fr}}
 </style>

@@ -99,17 +99,6 @@
   box-shadow: 0 8px 18px rgba(91, 75, 205, .2);
 }
 
-.auth-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--v15-z-modal);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(28, 28, 45, .48);
-  backdrop-filter: blur(10px);
-}
-
 .auth-dialog {
   position: relative;
   width: min(430px, 100%);

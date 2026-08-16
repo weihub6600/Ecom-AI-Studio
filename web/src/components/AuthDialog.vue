@@ -4,6 +4,7 @@ import {
   ref,
   watch
 } from "vue";
+import PlatformModal from "./PlatformModal.vue";
 import {
   apiRequest,
   jsonRequest
@@ -319,11 +320,15 @@ async function submit() {
 </script>
 
 <template>
-  <div
-    class="auth-overlay"
-    @click.self="close"
+  <PlatformModal
+    layer="modal"
+    padding="20px"
+    background="rgba(28, 28, 45, .48)"
+    blur="10px"
+    close-event="click"
+    @close="close"
   >
-    <section
+<section
       class="auth-dialog"
       role="dialog"
       aria-modal="true"
@@ -535,7 +540,7 @@ async function submit() {
         </button>
       </form>
     </section>
-  </div>
+  </PlatformModal>
 </template>
 
 <style scoped>

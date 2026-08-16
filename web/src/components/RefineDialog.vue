@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import PlatformModal from "./PlatformModal.vue";
 import type { ServerHistoryRecord } from "../types";
 import { formatSizeTitle, providerDisplayName } from "../utils/format";
 
@@ -37,9 +38,16 @@ function submit() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="refine-backdrop" @mousedown.self="emit('close')">
-      <section class="refine-dialog" role="dialog" aria-modal="true" aria-label="再次调整图片">
+  <PlatformModal
+    layer="critical"
+    padding="24px"
+    mobile-padding="12px"
+    background="rgba(24, 23, 42, .48)"
+    blur="10px"
+    close-event="mousedown"
+    @close="emit('close')"
+  >
+<section class="refine-dialog" role="dialog" aria-modal="true" aria-label="再次调整图片">
         <header class="refine-head">
           <div>
             <span>二次创作</span>
@@ -99,22 +107,10 @@ function submit() {
           </button>
         </footer>
       </section>
-    </div>
-  </Teleport>
+  </PlatformModal>
 </template>
 
 <style scoped>
-.refine-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--v15-z-critical);
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(24, 23, 42, .48);
-  backdrop-filter: blur(10px);
-}
-
 .refine-dialog {
   width: min(680px, 100%);
   max-height: min(86dvh, 760px);
@@ -296,8 +292,7 @@ function submit() {
 }
 
 @media (max-width: 640px) {
-  .refine-backdrop { padding: 12px; }
-  .refine-dialog { padding: 18px; border-radius: 17px; }
+    .refine-dialog { padding: 18px; border-radius: 17px; }
   .refine-context { grid-template-columns: 1fr; }
   .refine-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
