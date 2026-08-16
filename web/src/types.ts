@@ -71,6 +71,7 @@ export interface AuthUser {
   createdAt: string;
   approvedAt?: string;
   lastLoginAt?: string;
+  lastActiveAt?: string;
   credits: number;
   mustChangePassword?: boolean;
 }

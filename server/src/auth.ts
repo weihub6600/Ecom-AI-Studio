@@ -59,6 +59,9 @@ import {
 export * from "./auth/contracts.js";
 export { AUTH_COOKIE_NAME, createClearSessionCookie, createSessionCookie, readAuthToken } from "./auth/cookies.js";
 
+// V14_4_3_USER_ACTIVITY_TRACKING
+const USER_ACTIVITY_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
 interface AuthServiceOptions {
   database: AppDatabase;
   sessionTtlSeconds?: number;
@@ -94,6 +97,7 @@ interface UserRow extends RowDataPacket {
   created_at: string;
   approved_at: string | null;
   last_login_at: string | null;
+  last_active_at: string | null;
   credit_cents: number;
 }
 
@@ -175,7 +179,7 @@ export function createAuthService(options: AuthServiceOptions) {
        FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME = 'app_users'
-         AND COLUMN_NAME IN ('nickname','admin_note','must_change_password')`
+         AND COLUMN_NAME IN ('nickname','admin_note','must_change_password','last_active_at')`
     );
     const columns = new Set(rows.map((row) => String(row.COLUMN_NAME)));
     if (!columns.has("nickname")) {
@@ -187,6 +191,15 @@ export function createAuthService(options: AuthServiceOptions) {
     if (!columns.has("must_change_password")) {
       await pool.query("ALTER TABLE app_users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0 AFTER admin_note");
     }
+    if (!columns.has("last_active_at")) {
+      await pool.query("ALTER TABLE app_users ADD COLUMN last_active_at DATETIME(3) NULL AFTER last_login_at");
+    }
+    await pool.query(
+      `UPDATE app_users
+       SET last_active_at = last_login_at
+       WHERE last_active_at IS NULL
+         AND last_login_at IS NOT NULL`
+    );
   }
 
   async function createCaptcha():
@@ -456,6 +469,12 @@ export function createAuthService(options: AuthServiceOptions) {
         ]
       );
 
+      if (status === "active") {
+        await connection.execute(
+          "UPDATE app_users SET last_active_at = ? WHERE id = ?",
+          [createdAt, userId]
+        );
+      }
       const user = await requireUser(connection, userId);
       if (status !== "active") {
         return {
@@ -540,7 +559,10 @@ export function createAuthService(options: AuthServiceOptions) {
         "INSERT INTO app_sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
         [tokenHash, user.id, createdAt, expiresAt]
       );
-      await connection.execute("UPDATE app_users SET last_login_at = ? WHERE id = ?", [createdAt, user.id]);
+      await connection.execute(
+        "UPDATE app_users SET last_login_at = ?, last_active_at = ? WHERE id = ?",
+        [createdAt, createdAt, user.id]
+      );
       await insertLoginRecord(connection, {
         userId: user.id,
         username: user.username,
@@ -637,15 +659,36 @@ export function createAuthService(options: AuthServiceOptions) {
 
   async function getUserByToken(token: string | undefined): Promise<PublicUser | undefined> {
     if (!token) return undefined;
+
+    const now = new Date();
     const [rows] = await pool.query<UserRow[]>(
       `SELECT u.*
        FROM app_sessions s
        INNER JOIN app_users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'active'
        LIMIT 1`,
-      [hashToken(token), new Date()]
+      [hashToken(token), now]
     );
-    return rows[0] ? toPublicUser(rows[0]) : undefined;
+
+    const user = rows[0];
+    if (!user) return undefined;
+
+    const lastActiveIso = mysqlDateToIso(user.last_active_at);
+    const lastActiveAt = lastActiveIso ? new Date(lastActiveIso) : undefined;
+
+    if (!lastActiveAt || now.getTime() - lastActiveAt.getTime() >= USER_ACTIVITY_TOUCH_INTERVAL_MS) {
+      const threshold = new Date(now.getTime() - USER_ACTIVITY_TOUCH_INTERVAL_MS);
+      await pool.execute(
+        `UPDATE app_users
+         SET last_active_at = ?
+         WHERE id = ?
+           AND (last_active_at IS NULL OR last_active_at <= ?)`,
+        [now, user.id, threshold]
+      );
+      user.last_active_at = now.toISOString();
+    }
+
+    return toPublicUser(user);
   }
 
   async function logout(token: string | undefined): Promise<void> {
@@ -656,7 +699,7 @@ export function createAuthService(options: AuthServiceOptions) {
   async function listUsers(): Promise<AdminUserSummary[]> {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT u.*,
-         (SELECT COUNT(*) FROM app_login_records l WHERE l.user_id = u.id) AS login_count,
+         (SELECT COUNT(*) FROM app_login_records l WHERE l.user_id = u.id AND l.success = 1) AS login_count,
          (SELECT COUNT(*) FROM app_usage_records g WHERE g.user_id = u.id) AS usage_count,
          (SELECT l2.client_ip FROM app_login_records l2
           WHERE l2.user_id = u.id AND l2.success = 1
@@ -1638,6 +1681,7 @@ function toPublicUser(user: UserRow): PublicUser {
     createdAt: mysqlDateToIso(user.created_at) || new Date().toISOString(),
     approvedAt: mysqlDateToIso(user.approved_at),
     lastLoginAt: mysqlDateToIso(user.last_login_at),
+    lastActiveAt: mysqlDateToIso(user.last_active_at),
     credits: centsToPoints(Number(user.credit_cents)),
     mustChangePassword: Boolean(user.must_change_password) || undefined
   };

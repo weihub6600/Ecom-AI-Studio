@@ -19,6 +19,7 @@ export const SCHEMA_STATEMENTS = [
     created_at DATETIME(3) NOT NULL,
     approved_at DATETIME(3) NULL,
     last_login_at DATETIME(3) NULL,
+    last_active_at DATETIME(3) NULL,
     credit_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
     UNIQUE KEY uq_app_users_username_key (username_key),
     KEY idx_app_users_status_created (status, created_at),

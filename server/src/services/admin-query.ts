@@ -96,7 +96,7 @@ export function createAdminQueryService(database: AppDatabase) {
     const [countRows] = await database.pool.query<RowDataPacket[]>(`SELECT COUNT(*) total FROM app_users u ${clause}`, params);
     const [rows] = await database.pool.query<RowDataPacket[]>(
       `SELECT u.*,
-        (SELECT COUNT(*) FROM app_login_records l WHERE l.user_id = u.id) login_count,
+        (SELECT COUNT(*) FROM app_login_records l WHERE l.user_id = u.id AND l.success = 1) login_count,
         (SELECT COUNT(*) FROM app_usage_records x WHERE x.user_id = u.id) usage_count,
         (SELECT l2.client_ip FROM app_login_records l2 WHERE l2.user_id = u.id AND l2.success = 1 ORDER BY l2.created_at DESC LIMIT 1) last_login_ip
        FROM app_users u ${clause}
@@ -182,7 +182,7 @@ function page<T>(items: T[], total: number, input: PageInput): PageResult<T> {
 }
 function iso(value: unknown) { return mysqlDateToIso(value) || new Date().toISOString(); }
 function nullable(value: unknown) { return value === null || value === undefined || value === "" ? undefined : String(value); }
-function mapUser(r: RowDataPacket) { return { id:String(r.id), username:String(r.username), nickname:nullable(r.nickname), adminNote:nullable(r.admin_note), mustChangePassword:Boolean(r.must_change_password)||undefined, role:r.role, status:r.status, createdAt:iso(r.created_at), approvedAt:r.approved_at?iso(r.approved_at):undefined, lastLoginAt:r.last_login_at?iso(r.last_login_at):undefined, credits:Number(r.credit_cents)/100, loginCount:Number(r.login_count||0), usageCount:Number(r.usage_count||0), lastLoginIp:nullable(r.last_login_ip) }; }
+function mapUser(r: RowDataPacket) { return { id:String(r.id), username:String(r.username), nickname:nullable(r.nickname), adminNote:nullable(r.admin_note), mustChangePassword:Boolean(r.must_change_password)||undefined, role:r.role, status:r.status, createdAt:iso(r.created_at), approvedAt:r.approved_at?iso(r.approved_at):undefined, lastLoginAt:r.last_login_at?iso(r.last_login_at):undefined, lastActiveAt:r.last_active_at?iso(r.last_active_at):undefined, credits:Number(r.credit_cents)/100, loginCount:Number(r.login_count||0), usageCount:Number(r.usage_count||0), lastLoginIp:nullable(r.last_login_ip) }; }
 function mapUsage(r: RowDataPacket) { return { id:String(r.id), createdAt:iso(r.created_at), provider:String(r.provider), model:String(r.model), operation:r.operation, size:String(r.size), prompt:nullable(r.prompt), imageCount:Number(r.image_count||0), status:r.status, durationMs:r.duration_ms==null?undefined:Number(r.duration_ms), pointsCost:r.points_cost_cents==null?undefined:Number(r.points_cost_cents)/100, pointsRefunded:Boolean(r.points_refunded), error:nullable(r.error) }; }
 function mapLogin(r: RowDataPacket) { return { id:String(r.id), username:String(r.username), success:Boolean(r.success), reason:nullable(r.reason), createdAt:iso(r.created_at), clientIp:nullable(r.client_ip), userAgent:nullable(r.user_agent) }; }
 function mapCredit(r: RowDataPacket) { return { id:String(r.id), createdAt:iso(r.created_at), type:r.type, amount:Number(r.amount_cents)/100, balanceAfter:Number(r.balance_after_cents)/100, note:nullable(r.note), provider:nullable(r.provider), model:nullable(r.model) }; }

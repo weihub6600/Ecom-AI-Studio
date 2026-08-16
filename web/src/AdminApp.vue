@@ -501,10 +501,10 @@ function auditLabel(action: string) {
         </div>
         <div class="admin-v10-user-layout">
           <div class="admin-v10-card admin-v10-table-card">
-            <table><thead><tr><th>用户</th><th>状态</th><th>积分</th><th>调用</th><th>最近登录</th></tr></thead>
+            <table><thead><tr><th>用户</th><th>状态</th><th>积分</th><th>调用</th><th>登录</th><th>最近登录</th><th>最近活跃</th></tr></thead>
               <tbody><tr v-for="user in users" :key="user.id" :class="{ selected: selectedUser?.id === user.id }" @click="selectUser(user)">
                 <td><div class="admin-v10-user-cell"><span>{{ user.username.slice(0,1).toUpperCase() }}</span><div><strong>{{ user.nickname || user.username }}</strong><small>{{ user.nickname ? `账号 ${user.username}` : (user.role === 'admin' ? '站长' : formatDate(user.createdAt)) }}</small></div></div></td>
-                <td><i class="status-chip" :class="user.status">{{ statusLabel(user.status) }}</i></td><td>{{ user.role === 'admin' ? '不限' : formatPoints(user.credits) }}</td><td>{{ user.usageCount }}</td><td>{{ formatDate(user.lastLoginAt) }}</td>
+                <td><i class="status-chip" :class="user.status">{{ statusLabel(user.status) }}</i></td><td>{{ user.role === 'admin' ? '不限' : formatPoints(user.credits) }}</td><td>{{ user.usageCount }}</td><td>{{ user.loginCount }}</td><td>{{ formatDate(user.lastLoginAt) }}</td><td>{{ formatDate(user.lastActiveAt) }}</td>
               </tr></tbody></table>
             <div v-if="!users.length" class="admin-v10-empty">没有匹配用户</div>
             <div class="admin-v10-pagination"><button :disabled="usersPagination.page <= 1" @click="loadUsers(usersPagination.page - 1)">上一页</button><span>{{ usersPagination.page }} / {{ usersPagination.totalPages }}</span><button :disabled="usersPagination.page >= usersPagination.totalPages" @click="loadUsers(usersPagination.page + 1)">下一页</button></div>
@@ -514,7 +514,7 @@ function auditLabel(action: string) {
             <div v-if="!selectedUser" class="admin-v10-empty tall">点击左侧用户查看详情</div>
             <template v-else>
               <div class="admin-v10-profile"><span>{{ selectedUser.username.slice(0,1).toUpperCase() }}</span><div><h2>{{ selectedUser.username }}</h2><p>注册 {{ formatDate(selectedUser.createdAt) }}</p></div><i class="status-chip" :class="selectedUser.status">{{ statusLabel(selectedUser.status) }}</i></div>
-              <div class="admin-v10-balance"><span>当前积分</span><strong>{{ selectedUser.role === 'admin' ? '不限' : formatPoints(selectedUser.credits) }}</strong><small>登录 {{ selectedUser.loginCount }} 次 · 生图 {{ selectedUser.usageCount }} 次</small></div>
+              <div class="admin-v10-balance"><span>当前积分</span><strong>{{ selectedUser.role === 'admin' ? '不限' : formatPoints(selectedUser.credits) }}</strong><small>登录 {{ selectedUser.loginCount }} 次 · 生图 {{ selectedUser.usageCount }} 次 · 最近活跃 {{ formatDate(selectedUser.lastActiveAt) }}</small></div>
               <AdminUserAccountTools :user="selectedUser" @user-updated="handleAdminUserToolsUpdated" />
               <div class="admin-v10-form-block"><label>修改用户名</label><div><input v-model="usernameDraft" maxlength="32" /><button @click="saveUsername">保存</button></div></div>
               <div v-if="selectedUser.role !== 'admin'" class="admin-v10-form-block"><label>积分调整</label><div><input v-model="creditAmount" type="number" min="0.01" step="0.01" /><input v-model="creditNote" placeholder="备注" /></div><div class="action-row"><button class="positive" @click="adjustCredits(1)">增加积分</button><button class="danger" @click="adjustCredits(-1)">扣减积分</button></div></div>
