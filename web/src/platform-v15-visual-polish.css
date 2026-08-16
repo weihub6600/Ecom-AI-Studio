@@ -467,15 +467,6 @@
 }
 
 /* ===== Responsive ===== */
-@media(max-width:1180px){
-  .v15-shell .v15-topbar{
-    grid-template-columns:minmax(220px,1fr) auto;
-  }
-  .v15-shell .v15-topbar-nav{
-    display:none;
-  }
-}
-
 @media(max-width:760px){
   .v1501-home .v15-home-nav{
     min-height:62px;
@@ -504,33 +495,12 @@
   .v1501-home .announcement-countdown.compact{
     display:none !important;
   }
-  .v15-shell .v15-sidebar{
-    width:auto;
-  }
-  .v15-shell .v15-stage{
-    margin-left:0;
-  }
-  .v15-shell .v15-topbar{
-    height:58px;
-    grid-template-columns:1fr auto;
-    padding:0 11px 0 14px;
-  }
-  .v15-shell .v15-topbar-copy small{
-    display:none;
-  }
-  .v15-shell .v15-topbar-copy strong{
-    font-size:14px;
-  }
   .v15-shell .v15-account-trigger-copy{
     display:none;
   }
   .v15-shell .v15-account-trigger{
     min-height:40px;
     padding:3px;
-  }
-  .v15-shell .v15-content{
-    min-height:calc(100vh - 58px);
-    padding:10px;
   }
 }
 
