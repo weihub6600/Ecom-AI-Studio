@@ -80,7 +80,7 @@ function normalizePath(value: string): string {
 </script>
 
 <template>
-  <div class="v15-shell v1501-shell">
+  <div class="v15-shell">
     <aside class="v15-sidebar">
       <a class="v15-sidebar-brand" href="/" aria-label="ZHE AI 首页">
         <span>Z</span>

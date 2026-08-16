@@ -1,15 +1,15 @@
 /* V15.0.1 — visual polish layer */
 /* ===== Global V15 typography ===== */
 .v1501-home,
-.v1501-shell{
+.v15-shell{
   color:var(--v15-text);
   -webkit-font-smoothing:antialiased;
 }
 
 .v1501-home button,
 .v1501-home a,
-.v1501-shell button,
-.v1501-shell a{
+.v15-shell button,
+.v15-shell a{
   -webkit-tap-highlight-color:transparent;
 }
 
@@ -165,44 +165,44 @@
 }
 
 /* ===== Workspace sidebar ===== */
-.v1501-shell .v15-sidebar{
+.v15-shell .v15-sidebar{
   width:76px;
   padding:11px 10px 13px;
   border-right:1px solid #e5e7ee;
   background:rgba(255,255,255,.97);
 }
-.v1501-shell .v15-sidebar:hover{
+.v15-shell .v15-sidebar:hover{
   width:224px;
 }
-.v1501-shell .v15-sidebar-brand{
+.v15-shell .v15-sidebar-brand{
   height:48px;
   padding:0 7px;
 }
-.v1501-shell .v15-sidebar-brand>span{
+.v15-shell .v15-sidebar-brand>span{
   flex:0 0 40px;
   width:40px;
   height:40px;
   border-radius:12px;
   font-size:18px;
 }
-.v1501-shell .v15-sidebar-brand strong{
+.v15-shell .v15-sidebar-brand strong{
   font-size:15px;
 }
-.v1501-shell .v15-sidebar-brand small{
+.v15-shell .v15-sidebar-brand small{
   font-size:9px;
 }
-.v1501-shell .v15-sidebar-nav{
+.v15-shell .v15-sidebar-nav{
   gap:7px;
   margin-top:24px;
 }
-.v1501-shell .v15-sidebar-nav>a,
-.v1501-shell .v15-sidebar-bottom>a{
+.v15-shell .v15-sidebar-nav>a,
+.v15-shell .v15-sidebar-bottom>a{
   gap:12px;
   min-height:48px;
   padding:4px 7px;
   border-radius:12px;
 }
-.v1501-shell .v15-nav-icon{
+.v15-shell .v15-nav-icon{
   display:grid;
   place-items:center;
   flex:0 0 40px;
@@ -212,32 +212,32 @@
   color:#767b8c;
   transition:.18s ease;
 }
-.v1501-shell .v15-sidebar-nav>a:hover .v15-nav-icon,
-.v1501-shell .v15-sidebar-bottom>a:hover .v15-nav-icon{
+.v15-shell .v15-sidebar-nav>a:hover .v15-nav-icon,
+.v15-shell .v15-sidebar-bottom>a:hover .v15-nav-icon{
   background:#f2f0fb;
   color:#6556c8;
 }
-.v1501-shell .v15-sidebar-nav>a.active .v15-nav-icon{
+.v15-shell .v15-sidebar-nav>a.active .v15-nav-icon{
   background:linear-gradient(135deg,#eeeaff,#e3ddff);
   color:#5e4cc9;
   box-shadow:inset 0 0 0 1px rgba(104,88,212,.08);
 }
-.v1501-shell .v15-sidebar-nav>a strong,
-.v1501-shell .v15-sidebar-bottom>a strong{
+.v15-shell .v15-sidebar-nav>a strong,
+.v15-shell .v15-sidebar-bottom>a strong{
   font-size:13px;
   font-weight:720;
 }
-.v1501-shell .v15-sidebar-nav>a.active>i{
+.v15-shell .v15-sidebar-nav>a.active>i{
   right:2px;
   width:3px;
   height:24px;
 }
-.v1501-shell .v15-stage{
+.v15-shell .v15-stage{
   margin-left:76px;
 }
 
 /* ===== Workspace topbar ===== */
-.v1501-shell .v15-topbar{
+.v15-shell .v15-topbar{
   height:64px;
   padding:0 20px 0 24px;
   display:grid;
@@ -246,25 +246,25 @@
   border-bottom-color:#e4e6ed;
   box-shadow:0 1px 0 rgba(30,32,48,.025);
 }
-.v1501-shell .v15-topbar-copy{
+.v15-shell .v15-topbar-copy{
   gap:12px;
   min-width:0;
 }
-.v1501-shell .v15-topbar-copy>span{
+.v15-shell .v15-topbar-copy>span{
   padding:5px 8px;
   border-radius:7px;
   font-size:9px;
   letter-spacing:.1em;
 }
-.v1501-shell .v15-topbar-copy>div{
+.v15-shell .v15-topbar-copy>div{
   gap:10px;
   min-width:0;
 }
-.v1501-shell .v15-topbar-copy strong{
+.v15-shell .v15-topbar-copy strong{
   font-size:16px;
   line-height:1.2;
 }
-.v1501-shell .v15-topbar-copy small{
+.v15-shell .v15-topbar-copy small{
   overflow:hidden;
   max-width:390px;
   color:#8b8f9f;
@@ -272,7 +272,7 @@
   white-space:nowrap;
   text-overflow:ellipsis;
 }
-.v1501-shell .v15-topbar-nav{
+.v15-shell .v15-topbar-nav{
   display:flex;
   align-items:center;
   gap:5px;
@@ -282,7 +282,7 @@
   background:#fff;
   box-shadow:0 5px 18px rgba(37,39,57,.035);
 }
-.v1501-shell .v15-topbar-nav a{
+.v15-shell .v15-topbar-nav a{
   display:inline-flex;
   align-items:center;
   gap:6px;
@@ -295,22 +295,22 @@
   text-decoration:none;
   transition:.17s ease;
 }
-.v1501-shell .v15-topbar-nav a:hover,
-.v1501-shell .v15-topbar-nav a.active{
+.v15-shell .v15-topbar-nav a:hover,
+.v15-shell .v15-topbar-nav a.active{
   background:#f0edff;
   color:#5f4fc4;
 }
-.v1501-shell .v15-topbar-actions{
+.v15-shell .v15-topbar-actions{
   justify-self:end;
 }
-.v1501-shell .v15-login-chip{
+.v15-shell .v15-login-chip{
   min-height:40px;
   display:inline-flex;
   align-items:center;
   padding:0 15px;
   font-size:12.5px;
 }
-.v1501-shell .v15-content{
+.v15-shell .v15-content{
   min-height:calc(100vh - 64px);
   padding:18px 18px 28px;
 }
@@ -488,76 +488,76 @@
 }
 
 /* ===== Embedded workbench: improve readability without changing business logic ===== */
-.v1501-shell .v15-content .workspace-embedded .panel-heading h2{
+.v15-shell .v15-content .workspace-embedded .panel-heading h2{
   font-size:18px;
 }
-.v1501-shell .v15-content .workspace-embedded .panel-heading p{
+.v15-shell .v15-content .workspace-embedded .panel-heading p{
   font-size:12.5px;
   line-height:1.55;
 }
-.v1501-shell .v15-content .workspace-embedded .field-block>label,
-.v1501-shell .v15-content .workspace-embedded .label-row label{
+.v15-shell .v15-content .workspace-embedded .field-block>label,
+.v15-shell .v15-content .workspace-embedded .label-row label{
   font-size:13px;
 }
-.v1501-shell .v15-content .workspace-embedded .label-row span,
-.v1501-shell .v15-content .workspace-embedded .operation-pill,
-.v1501-shell .v15-content .workspace-embedded .meta-row span{
+.v15-shell .v15-content .workspace-embedded .label-row span,
+.v15-shell .v15-content .workspace-embedded .operation-pill,
+.v15-shell .v15-content .workspace-embedded .meta-row span{
   font-size:11px;
 }
-.v1501-shell .v15-content .workspace-embedded .model-copy strong{
+.v15-shell .v15-content .workspace-embedded .model-copy strong{
   font-size:14.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .model-copy span{
+.v15-shell .v15-content .workspace-embedded .model-copy span{
   font-size:12.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .status-tag{
+.v15-shell .v15-content .workspace-embedded .status-tag{
   font-size:10.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .mode-copy strong{
+.v15-shell .v15-content .workspace-embedded .mode-copy strong{
   font-size:13.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .mode-copy small{
+.v15-shell .v15-content .workspace-embedded .mode-copy small{
   font-size:11px;
 }
-.v1501-shell .v15-content .workspace-embedded .select-control,
-.v1501-shell .v15-content .workspace-embedded input[type="text"],
-.v1501-shell .v15-content .workspace-embedded input[type="number"],
-.v1501-shell .v15-content .workspace-embedded textarea{
+.v15-shell .v15-content .workspace-embedded .select-control,
+.v15-shell .v15-content .workspace-embedded input[type="text"],
+.v15-shell .v15-content .workspace-embedded input[type="number"],
+.v15-shell .v15-content .workspace-embedded textarea{
   font-size:13px;
 }
-.v1501-shell .v15-content .workspace-embedded button{
+.v15-shell .v15-content .workspace-embedded button{
   font-size:max(12px,1em);
 }
 
 /* ===== Tool/task pages: stop using 8-10px copy ===== */
-.v1501-shell .v15-tools-hero p,
-.v1501-shell .v15-tasks-hero p{
+.v15-shell .v15-tools-hero p,
+.v15-shell .v15-tasks-hero p{
   font-size:13px;
 }
-.v1501-shell .v15-tools-toolbar input,
-.v1501-shell .v15-tools-toolbar button{
+.v15-shell .v15-tools-toolbar input,
+.v15-shell .v15-tools-toolbar button{
   font-size:12px;
 }
-.v1501-shell .v15-tools-card h2{
+.v15-shell .v15-tools-card h2{
   font-size:16px;
 }
-.v1501-shell .v15-tools-card p,
-.v1501-shell .v15-tools-card>b{
+.v15-shell .v15-tools-card p,
+.v15-shell .v15-tools-card>b{
   font-size:11.5px;
 }
-.v1501-shell .v15-tools-card i{
+.v15-shell .v15-tools-card i{
   font-size:9.5px;
 }
-.v1501-shell .v15-task-card strong{
+.v15-shell .v15-task-card strong{
   font-size:13px;
 }
-.v1501-shell .v15-task-main>p{
+.v15-shell .v15-task-main>p{
   font-size:11.5px;
 }
-.v1501-shell .v15-task-meta{
+.v15-shell .v15-task-meta{
   font-size:10px;
 }
-.v1501-shell .v15-task-action{
+.v15-shell .v15-task-action{
   font-size:11px;
 }
 
@@ -619,10 +619,10 @@
 
 /* ===== Responsive ===== */
 @media(max-width:1180px){
-  .v1501-shell .v15-topbar{
+  .v15-shell .v15-topbar{
     grid-template-columns:minmax(220px,1fr) auto;
   }
-  .v1501-shell .v15-topbar-nav{
+  .v15-shell .v15-topbar-nav{
     display:none;
   }
 }
@@ -655,31 +655,31 @@
   .v1501-home .announcement-countdown.compact{
     display:none !important;
   }
-  .v1501-shell .v15-sidebar{
+  .v15-shell .v15-sidebar{
     width:auto;
   }
-  .v1501-shell .v15-stage{
+  .v15-shell .v15-stage{
     margin-left:0;
   }
-  .v1501-shell .v15-topbar{
+  .v15-shell .v15-topbar{
     height:58px;
     grid-template-columns:1fr auto;
     padding:0 11px 0 14px;
   }
-  .v1501-shell .v15-topbar-copy small{
+  .v15-shell .v15-topbar-copy small{
     display:none;
   }
-  .v1501-shell .v15-topbar-copy strong{
+  .v15-shell .v15-topbar-copy strong{
     font-size:14px;
   }
-  .v1501-shell .v15-account-trigger-copy{
+  .v15-shell .v15-account-trigger-copy{
     display:none;
   }
-  .v1501-shell .v15-account-trigger{
+  .v15-shell .v15-account-trigger{
     min-height:40px;
     padding:3px;
   }
-  .v1501-shell .v15-content{
+  .v15-shell .v15-content{
     min-height:calc(100vh - 58px);
     padding:10px;
   }
@@ -781,65 +781,65 @@
 }
 
 /* ===== Workspace top bar: slightly stronger hierarchy ===== */
-.v1501-shell .v15-topbar{
+.v15-shell .v15-topbar{
   height:66px;
 }
-.v1501-shell .v15-topbar-copy strong{
+.v15-shell .v15-topbar-copy strong{
   font-size:16.5px;
 }
-.v1501-shell .v15-topbar-copy small{
+.v15-shell .v15-topbar-copy small{
   font-size:12px;
 }
-.v1501-shell .v15-topbar-nav a{
+.v15-shell .v15-topbar-nav a{
   min-height:40px;
   padding:0 14px;
   font-size:13.5px;
 }
-.v1501-shell .v15-content{
+.v15-shell .v15-content{
   min-height:calc(100vh - 66px);
 }
 
 /* ===== Workbench readability: secondary information should remain readable ===== */
-.v1501-shell .v15-content .workspace-embedded .panel-heading p{
+.v15-shell .v15-content .workspace-embedded .panel-heading p{
   font-size:13px;
   line-height:1.5;
 }
-.v1501-shell .v15-content .workspace-embedded .field-block>label,
-.v1501-shell .v15-content .workspace-embedded .label-row label{
+.v15-shell .v15-content .workspace-embedded .field-block>label,
+.v15-shell .v15-content .workspace-embedded .label-row label{
   font-size:13.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .label-row span,
-.v1501-shell .v15-content .workspace-embedded .operation-pill,
-.v1501-shell .v15-content .workspace-embedded .meta-row span{
+.v15-shell .v15-content .workspace-embedded .label-row span,
+.v15-shell .v15-content .workspace-embedded .operation-pill,
+.v15-shell .v15-content .workspace-embedded .meta-row span{
   font-size:11.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .model-copy span{
+.v15-shell .v15-content .workspace-embedded .model-copy span{
   font-size:13px;
   line-height:1.5;
 }
-.v1501-shell .v15-content .workspace-embedded .status-tag{
+.v15-shell .v15-content .workspace-embedded .status-tag{
   font-size:11px;
 }
-.v1501-shell .v15-content .workspace-embedded .mode-copy small{
+.v15-shell .v15-content .workspace-embedded .mode-copy small{
   font-size:11.8px;
   line-height:1.45;
 }
-.v1501-shell .v15-content .workspace-embedded .select-control,
-.v1501-shell .v15-content .workspace-embedded input[type="text"],
-.v1501-shell .v15-content .workspace-embedded input[type="number"],
-.v1501-shell .v15-content .workspace-embedded textarea{
+.v15-shell .v15-content .workspace-embedded .select-control,
+.v15-shell .v15-content .workspace-embedded input[type="text"],
+.v15-shell .v15-content .workspace-embedded input[type="number"],
+.v15-shell .v15-content .workspace-embedded textarea{
   font-size:13.5px;
 }
-.v1501-shell .v15-content .workspace-embedded .control-panel small,
-.v1501-shell .v15-content .workspace-embedded .preview-panel small,
-.v1501-shell .v15-content .workspace-embedded .history-panel small{
+.v15-shell .v15-content .workspace-embedded .control-panel small,
+.v15-shell .v15-content .workspace-embedded .preview-panel small,
+.v15-shell .v15-content .workspace-embedded .history-panel small{
   font-size:max(11.5px,1em);
 }
 
 /* Keep dense metadata compact, but not unreadably small. */
-.v1501-shell .v15-content .workspace-embedded .history-panel time,
-.v1501-shell .v15-content .workspace-embedded .history-panel .history-meta,
-.v1501-shell .v15-content .workspace-embedded .preview-panel .meta-row{
+.v15-shell .v15-content .workspace-embedded .history-panel time,
+.v15-shell .v15-content .workspace-embedded .history-panel .history-meta,
+.v15-shell .v15-content .workspace-embedded .preview-panel .meta-row{
   font-size:11.5px;
 }
 
