@@ -463,7 +463,7 @@
 
 /* ===== Workspace topbar ===== */
 .v15-shell .v15-topbar{
-  height:64px;
+  height:66px;
   padding:0 20px 0 24px;
   display:grid;
   grid-template-columns:minmax(260px,1fr) auto minmax(220px,1fr);
@@ -486,14 +486,14 @@
   min-width:0;
 }
 .v15-shell .v15-topbar-copy strong{
-  font-size:16px;
+  font-size:16.5px;
   line-height:1.2;
 }
 .v15-shell .v15-topbar-copy small{
   overflow:hidden;
   max-width:390px;
   color:#8b8f9f;
-  font-size:11.5px;
+  font-size:12px;
   white-space:nowrap;
   text-overflow:ellipsis;
 }
@@ -511,11 +511,11 @@
   display:inline-flex;
   align-items:center;
   gap:6px;
-  min-height:38px;
-  padding:0 13px;
+  min-height:40px;
+  padding:0 14px;
   border-radius:9px;
   color:#6f7485;
-  font-size:13px;
+  font-size:13.5px;
   font-weight:720;
   text-decoration:none;
   transition:.17s ease;
@@ -536,7 +536,7 @@
   font-size:12.5px;
 }
 .v15-shell .v15-content{
-  min-height:calc(100vh - 64px);
+  min-height:calc(100vh - 66px);
   padding:18px 18px 28px;
 }
 
@@ -558,18 +558,13 @@
     margin-left:0;
   }
   .v15-shell .v15-topbar{
-    height:58px;
     grid-template-columns:1fr auto;
     padding:0 11px 0 14px;
   }
   .v15-shell .v15-topbar-copy small{
     display:none;
   }
-  .v15-shell .v15-topbar-copy strong{
-    font-size:14px;
-  }
   .v15-shell .v15-content{
-    min-height:calc(100vh - 58px);
     padding:10px;
   }
 }

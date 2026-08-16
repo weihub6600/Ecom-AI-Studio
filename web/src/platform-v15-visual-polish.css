@@ -599,25 +599,6 @@
   font-size:14.5px;
 }
 
-/* ===== Workspace top bar: slightly stronger hierarchy ===== */
-.v15-shell .v15-topbar{
-  height:66px;
-}
-.v15-shell .v15-topbar-copy strong{
-  font-size:16.5px;
-}
-.v15-shell .v15-topbar-copy small{
-  font-size:12px;
-}
-.v15-shell .v15-topbar-nav a{
-  min-height:40px;
-  padding:0 14px;
-  font-size:13.5px;
-}
-.v15-shell .v15-content{
-  min-height:calc(100vh - 66px);
-}
-
 /* ===== Workbench readability: secondary information should remain readable ===== */
 .v15-shell .v15-content .workspace-embedded .panel-heading p{
   font-size:13px;
