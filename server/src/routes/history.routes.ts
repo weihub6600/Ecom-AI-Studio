@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import type { HistoryService } from "../history.js";
 import { HistoryValidationError, parseHistorySaveInput, parseHistorySourceImages } from "../history.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
+import { createSimpleRateLimit } from "../middleware/rate-limit.js";
 import { readLimit, readRouteParam } from "../utils/express.js";
 
 export function createHistoryRouter(options: {
@@ -10,6 +11,74 @@ export function createHistoryRouter(options: {
 }): Router {
   const { historyService, requireAuth } = options;
   const router = Router();
+
+  const historyWriteWindowMs =
+    readPositiveIntegerEnv(
+      "HISTORY_WRITE_RATE_WINDOW_MS",
+      60_000
+    );
+
+  /*
+   * Shared IP ceiling across history write endpoints.
+   * This is intentionally much higher than the per-user
+   * limits so normal users behind NAT are not penalized.
+   */
+  const historyWriteIpRateLimit =
+    createSimpleRateLimit({
+      windowMs: historyWriteWindowMs,
+      maxAttempts:
+        readPositiveIntegerEnv(
+          "HISTORY_WRITE_IP_RATE_MAX",
+          120
+        ),
+      code:
+        "HISTORY_WRITE_IP_RATE_LIMITED",
+      message:
+        "\u540c\u4e00\u7f51\u7edc\u7684\u5386\u53f2\u8bb0\u5f55\u5199\u5165\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5",
+      keyGenerator: (request) =>
+        `ip:${
+          request.ip ||
+          request.socket.remoteAddress ||
+          "unknown"
+        }`
+    });
+
+  const historySaveUserRateLimit =
+    createSimpleRateLimit({
+      windowMs: historyWriteWindowMs,
+      maxAttempts:
+        readPositiveIntegerEnv(
+          "HISTORY_SAVE_RATE_MAX",
+          30
+        ),
+      code:
+        "HISTORY_SAVE_RATE_LIMITED",
+      message:
+        "\u5386\u53f2\u8bb0\u5f55\u4fdd\u5b58\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5",
+      keyGenerator: (request) =>
+        `user:${
+          getAuthenticatedUser(request).id
+        }`
+    });
+
+  const historySourceUserRateLimit =
+    createSimpleRateLimit({
+      windowMs: historyWriteWindowMs,
+      maxAttempts:
+        readPositiveIntegerEnv(
+          "HISTORY_SOURCE_RATE_MAX",
+          20
+        ),
+      code:
+        "HISTORY_SOURCE_RATE_LIMITED",
+      message:
+        "\u539f\u59cb\u53c2\u8003\u7d20\u6750\u5f52\u6863\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5",
+      keyGenerator: (request) =>
+        `user:${
+          getAuthenticatedUser(request).id
+        }`
+    });
+
 
   router.get("/generated/:filename", requireAuth, async (request, response) => {
     try {
@@ -128,7 +197,12 @@ export function createHistoryRouter(options: {
     }
   );
 
-  router.post("/api/history", requireAuth, async (request, response) => {
+  router.post(
+    "/api/history",
+    requireAuth,
+    historyWriteIpRateLimit,
+    historySaveUserRateLimit,
+    async (request, response) => {
     try {
       const user = getAuthenticatedUser(request);
       const input = parseHistorySaveInput({ ...request.body, clientId: user.id });
@@ -152,6 +226,8 @@ export function createHistoryRouter(options: {
   router.post(
     "/api/history/:id/source-images",
     requireAuth,
+    historyWriteIpRateLimit,
+    historySourceUserRateLimit,
     async (request, response) => {
       try {
         const user = getAuthenticatedUser(request);
@@ -248,4 +324,21 @@ export function createHistoryRouter(options: {
   });
 
   return router;
+}
+
+function readPositiveIntegerEnv(
+  name: string,
+  fallback: number
+): number {
+  const value =
+    Number(process.env[name]);
+
+  if (
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+    return fallback;
+  }
+
+  return Math.trunc(value);
 }
