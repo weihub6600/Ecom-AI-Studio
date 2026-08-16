@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, statfs, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -54,6 +54,13 @@ export class HistoryValidationError extends Error {
   }
 }
 
+export class HistoryStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HistoryStorageError";
+  }
+}
+
 interface HistoryServiceOptions {
   database: AppDatabase;
   dataDir: string;
@@ -61,6 +68,8 @@ interface HistoryServiceOptions {
   maxRecords?: number;
   maxImageBytes?: number;
   downloadTimeoutMs?: number;
+  minFreeDiskBytes?: number;
+  maxDiskUsedPercent?: number;
 }
 
 interface StoredFile {
@@ -68,8 +77,16 @@ interface StoredFile {
   mimeType: string;
 }
 
+interface HistoryStorageGuard {
+  minFreeDiskBytes: number;
+  maxDiskUsedPercent: number;
+}
+
 const DEFAULT_MAX_IMAGE_BYTES = 40 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
+const DEFAULT_MIN_FREE_DISK_BYTES =
+  1024 * 1024 * 1024;
+const DEFAULT_MAX_DISK_USED_PERCENT = 95;
 const MAX_REDIRECTS = 5;
 
 export function parseHistoryClientId(value: unknown): string {
@@ -175,8 +192,31 @@ export function createHistoryService(options: HistoryServiceOptions) {
   const { pool } = options.database;
   const dataDir = path.resolve(options.dataDir);
   const generatedDir = path.join(dataDir, "generated");
-  const maxImageBytes = positiveIntegerOrDefault(options.maxImageBytes, DEFAULT_MAX_IMAGE_BYTES);
-  const downloadTimeoutMs = positiveIntegerOrDefault(options.downloadTimeoutMs, DEFAULT_DOWNLOAD_TIMEOUT_MS);
+  const maxImageBytes =
+    positiveIntegerOrDefault(
+      options.maxImageBytes,
+      DEFAULT_MAX_IMAGE_BYTES
+    );
+
+  const downloadTimeoutMs =
+    positiveIntegerOrDefault(
+      options.downloadTimeoutMs,
+      DEFAULT_DOWNLOAD_TIMEOUT_MS
+    );
+
+  const storageGuard: HistoryStorageGuard = {
+    minFreeDiskBytes:
+      positiveIntegerOrDefault(
+        options.minFreeDiskBytes,
+        DEFAULT_MIN_FREE_DISK_BYTES
+      ),
+    maxDiskUsedPercent:
+      boundedPercentOrDefault(
+        options.maxDiskUsedPercent,
+        DEFAULT_MAX_DISK_USED_PERCENT
+      )
+  };
+
   let writeQueue: Promise<void> = Promise.resolve();
 
   async function initialize(): Promise<void> {
@@ -452,7 +492,8 @@ export function createHistoryService(options: HistoryServiceOptions) {
               fileBaseName,
               generatedDir,
               maxImageBytes,
-              downloadTimeoutMs
+              downloadTimeoutMs,
+              storageGuard
             );
 
           savedFiles.push(stored.fileName);
@@ -558,7 +599,8 @@ export function createHistoryService(options: HistoryServiceOptions) {
             fileBaseName,
             generatedDir,
             maxImageBytes,
-            downloadTimeoutMs
+            downloadTimeoutMs,
+            storageGuard
           );
           savedFiles.push(stored.fileName);
           images.push({ ...source, url: `/generated/${encodeURIComponent(stored.fileName)}`, mimeType: stored.mimeType });
@@ -790,13 +832,30 @@ async function downloadAndStoreImage(
   fileBaseName: string,
   generatedDir: string,
   maxImageBytes: number,
-  timeoutMs: number
+  timeoutMs: number,
+  storageGuard: HistoryStorageGuard
 ): Promise<StoredFile> {
   const dataImage = decodeDataImage(sourceUrl, maxImageBytes);
   if (dataImage) {
-    const extension = extensionFromMimeType(dataImage.mimeType);
-    const fileName = `${fileBaseName}.${extension}`;
-    await writeFile(path.join(generatedDir, fileName), dataImage.buffer, { flag: "wx" });
+    const extension =
+      extensionFromMimeType(
+        dataImage.mimeType
+      );
+
+    const fileName =
+      `${fileBaseName}.${extension}`;
+
+    await assertHistoryStorageCapacity(
+      generatedDir,
+      dataImage.buffer.byteLength,
+      storageGuard
+    );
+
+    await writeFile(
+      path.join(generatedDir, fileName),
+      dataImage.buffer,
+      { flag: "wx" }
+    );
     return { fileName, mimeType: dataImage.mimeType };
   }
 
@@ -834,9 +893,23 @@ async function downloadAndStoreImage(
     const mimeType = headerMimeType || detectImageMimeType(buffer);
     if (!mimeType) throw new Error("服务商返回的内容不是受支持的图片格式");
 
-    const extension = extensionFromMimeType(mimeType);
-    const fileName = `${fileBaseName}.${extension}`;
-    await writeFile(path.join(generatedDir, fileName), buffer, { flag: "wx" });
+    const extension =
+      extensionFromMimeType(mimeType);
+
+    const fileName =
+      `${fileBaseName}.${extension}`;
+
+    await assertHistoryStorageCapacity(
+      generatedDir,
+      buffer.byteLength,
+      storageGuard
+    );
+
+    await writeFile(
+      path.join(generatedDir, fileName),
+      buffer,
+      { flag: "wx" }
+    );
     return { fileName, mimeType };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -961,6 +1034,100 @@ function isPrivateAddress(address: string): boolean {
     (first === 172 && second >= 16 && second <= 31) ||
     (first === 192 && second === 168) ||
     first >= 224
+  );
+}
+
+
+async function assertHistoryStorageCapacity(
+  generatedDir: string,
+  incomingBytes: number,
+  guard: HistoryStorageGuard
+): Promise<void> {
+  let fsInfo;
+
+  try {
+    fsInfo =
+      await statfs(generatedDir);
+  } catch {
+    throw new HistoryStorageError(
+      "\u65e0\u6cd5\u786e\u8ba4\u670d\u52a1\u5668\u5269\u4f59\u5b58\u50a8\u7a7a\u95f4\uff0c\u5df2\u6682\u505c\u65b0\u56fe\u7247\u5f52\u6863"
+    );
+  }
+
+  const blockSize =
+    Number(fsInfo.bsize);
+
+  const totalBytes =
+    Number(fsInfo.blocks) *
+    blockSize;
+
+  const freeBytes =
+    Number(fsInfo.bavail) *
+    blockSize;
+
+  if (
+    !Number.isFinite(totalBytes) ||
+    !Number.isFinite(freeBytes) ||
+    totalBytes <= 0 ||
+    freeBytes < 0
+  ) {
+    throw new HistoryStorageError(
+      "\u670d\u52a1\u5668\u5b58\u50a8\u72b6\u6001\u5f02\u5e38\uff0c\u5df2\u6682\u505c\u65b0\u56fe\u7247\u5f52\u6863"
+    );
+  }
+
+  const safeIncomingBytes =
+    Math.max(
+      0,
+      Number.isFinite(incomingBytes)
+        ? incomingBytes
+        : 0
+    );
+
+  const projectedFreeBytes =
+    freeBytes -
+    safeIncomingBytes;
+
+  const projectedUsedPercent =
+    totalBytes > 0
+      ? (
+          (
+            totalBytes -
+            projectedFreeBytes
+          ) /
+          totalBytes
+        ) * 100
+      : 100;
+
+  if (
+    projectedFreeBytes <
+      guard.minFreeDiskBytes ||
+    projectedUsedPercent >=
+      guard.maxDiskUsedPercent
+  ) {
+    throw new HistoryStorageError(
+      "\u670d\u52a1\u5668\u5b58\u50a8\u7a7a\u95f4\u5df2\u63a5\u8fd1\u5b89\u5168\u4e0a\u9650\uff0c\u5df2\u6682\u505c\u65b0\u56fe\u7247\u5f52\u6863\uff0c\u8bf7\u8054\u7cfb\u7ba1\u7406\u5458"
+    );
+  }
+}
+
+function boundedPercentOrDefault(
+  value: number | undefined,
+  fallback: number
+): number {
+  if (
+    !Number.isFinite(value) ||
+    value === undefined
+  ) {
+    return fallback;
+  }
+
+  return Math.min(
+    99.9,
+    Math.max(
+      1,
+      Number(value)
+    )
   );
 }
 

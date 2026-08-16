@@ -1,6 +1,11 @@
 import { Router, type RequestHandler } from "express";
 import type { HistoryService } from "../history.js";
-import { HistoryValidationError, parseHistorySaveInput, parseHistorySourceImages } from "../history.js";
+import {
+  HistoryStorageError,
+  HistoryValidationError,
+  parseHistorySaveInput,
+  parseHistorySourceImages
+} from "../history.js";
 import { getAuthenticatedUser } from "../middleware/auth.js";
 import { createSimpleRateLimit } from "../middleware/rate-limit.js";
 import { readLimit, readRouteParam } from "../utils/express.js";
@@ -213,6 +218,15 @@ export function createHistoryRouter(options: {
       });
       return response.status(201).json({ success: true, record });
     } catch (error) {
+      if (error instanceof HistoryStorageError) {
+        return response.status(507).json({
+          error: {
+            code: "HISTORY_STORAGE_FULL",
+            message: error.message
+          }
+        });
+      }
+
       if (error instanceof HistoryValidationError) {
         return response.status(400).json({ error: { code: "INVALID_HISTORY_REQUEST", message: error.message } });
       }
@@ -267,6 +281,20 @@ export function createHistoryRouter(options: {
           record
         });
       } catch (error) {
+        if (
+          error instanceof
+          HistoryStorageError
+        ) {
+          return response.status(507).json({
+            error: {
+              code:
+                "HISTORY_STORAGE_FULL",
+              message:
+                error.message
+            }
+          });
+        }
+
         if (
           error instanceof
           HistoryValidationError

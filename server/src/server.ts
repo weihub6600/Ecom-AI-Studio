@@ -169,6 +169,22 @@ const database =
           process.env
             .IMAGE_DOWNLOAD_TIMEOUT_MS ||
           120_000
+        ),
+      minFreeDiskBytes:
+        Number(
+          process.env
+            .HISTORY_MIN_FREE_DISK_MB ||
+          1024
+        ) *
+        1024 *
+        1024,
+      maxDiskUsedPercent:
+        Number(
+          process.env
+            .HISTORY_DISK_BLOCK_PERCENT ||
+          process.env
+            .HEALTH_DISK_CRITICAL_PERCENT ||
+          95
         )
     });
 
