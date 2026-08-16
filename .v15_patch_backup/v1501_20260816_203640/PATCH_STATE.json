@@ -1,0 +1,11 @@
+{
+  "patch": "V15.0.1-visual-polish-20260816",
+  "target": "E:\\Code\\Ecom-AI-Studio-git",
+  "files": {
+    "web/src/components/PlatformShell.vue": true,
+    "web/src/components/PlatformAccountMenu.vue": false,
+    "web/src/HomeApp.vue": true,
+    "web/src/platform-v15-visual-polish.css": false,
+    "web/src/main.ts": true
+  }
+}

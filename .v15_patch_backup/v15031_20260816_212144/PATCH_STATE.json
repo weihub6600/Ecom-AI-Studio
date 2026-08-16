@@ -1,0 +1,7 @@
+{
+  "patch": "V15.0.3.1-legal-ts-hotfix-20260816",
+  "target": "E:\\Code\\Ecom-AI-Studio-git",
+  "files": {
+    "web/src/pages/LegalPage.vue": true
+  }
+}

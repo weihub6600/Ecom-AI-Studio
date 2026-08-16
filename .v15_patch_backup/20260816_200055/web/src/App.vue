@@ -30,15 +30,6 @@ import type {
 } from "./types";
 import { formatSizeTitle, greatestCommonDivisor, providerDisplayName } from "./utils/format";
 
-const props = withDefaults(
-  defineProps<{
-    embedded?: boolean;
-  }>(),
-  {
-    embedded: false
-  }
-);
-
 type GenerationPhase = "queue" | "analysis" | "creating" | "rendering" | "complete";
 
 const DEFAULT_PROMPT = "";
@@ -1874,7 +1865,6 @@ async function downloadAllZip() {
 <template>
   <div class="app-shell" :class="{ 'is-authenticated': isAuthenticated }">
     <AppHeader
-      v-if="!props.embedded"
       :auth-ready="authReady"
       :user="authUser"
       @login="openAuthDialog('login')"
@@ -1884,9 +1874,9 @@ async function downloadAllZip() {
       @logout="logout"
     />
 
-    <AnnouncementBar v-if="!props.embedded" />
+    <AnnouncementBar />
 
-    <main class="workspace" :class="{ 'workspace-embedded': props.embedded }">
+    <main class="workspace">
       <IntroSection
         :selected-model="selectedModel"
         :collapsible="isAuthenticated"
@@ -1985,7 +1975,7 @@ async function downloadAllZip() {
           />
           <a
             class="history-more-link"
-            href="/library"
+            href="/account?tab=library"
           >
             进入作品库
           </a>
@@ -1993,7 +1983,7 @@ async function downloadAllZip() {
       </div>
     </main>
 
-    <HomeFloatingActions v-if="!props.embedded" />
+    <HomeFloatingActions />
 
     <RefineDialog
       v-if="refineRecord"

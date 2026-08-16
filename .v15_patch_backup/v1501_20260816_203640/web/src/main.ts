@@ -1,6 +1,5 @@
 import { createApp } from "vue";
 import HomeApp from "./HomeApp.vue";
-import LegalPage from "./pages/LegalPage.vue";
 import WorkspacePage from "./pages/WorkspacePage.vue";
 import BatchPage from "./pages/BatchPage.vue";
 import LibraryPage from "./pages/LibraryPage.vue";
@@ -14,7 +13,6 @@ import "./admin-page.css";
 import "./account-page.css";
 import "./provider-manager.css";
 import "./platform-v15.css";
-import "./platform-v15-visual-polish.css";
 
 function normalizePath(value: string): string {
   const trimmed = value.replace(/\/+$/, "");
@@ -23,17 +21,8 @@ function normalizePath(value: string): string {
 
 const path = normalizePath(window.location.pathname);
 
-const legalPaths = new Set([
-  "/terms",
-  "/privacy",
-  "/ai-content",
-  "/commercial-use"
-]);
-
 const Page =
-  legalPaths.has(path)
-    ? LegalPage
-    : path === "/admin" || path.startsWith("/admin/")
+  path === "/admin" || path.startsWith("/admin/")
     ? AdminApp
     : path === "/account" || path.startsWith("/account/")
       ? AccountApp

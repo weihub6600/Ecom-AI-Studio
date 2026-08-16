@@ -1,0 +1,10 @@
+{
+  "patch": "V15.0.3-home-grid-legal-20260816",
+  "target": "E:\\Code\\Ecom-AI-Studio-git",
+  "files": {
+    "web/src/HomeApp.vue": true,
+    "web/src/platform-v15-visual-polish.css": true,
+    "web/src/pages/LegalPage.vue": false,
+    "web/src/main.ts": true
+  }
+}

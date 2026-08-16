@@ -1,0 +1,7 @@
+{
+  "patch": "V15.0.2-layout-refine-20260816",
+  "target": "E:\\Code\\Ecom-AI-Studio-git",
+  "files": {
+    "web/src/platform-v15-visual-polish.css": true
+  }
+}

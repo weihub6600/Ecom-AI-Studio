@@ -17,15 +17,6 @@ import {
   formatDate
 } from "./utils/format";
 
-const props = withDefaults(
-  defineProps<{
-    embedded?: boolean;
-  }>(),
-  {
-    embedded: false
-  }
-);
-
 const items = ref<GalleryItem[]>([]);
 const pagination = ref<Pagination>({
   page: 1,
@@ -152,7 +143,7 @@ function clearFilters() {
 
 <template>
   <div class="gallery-page">
-    <header v-if="!props.embedded" class="gallery-nav">
+    <header class="gallery-nav">
       <a class="gallery-brand" href="/">
         <span>Z</span>
         <div>
@@ -162,7 +153,7 @@ function clearFilters() {
       </a>
 
       <nav>
-        <a href="/workspace">创作工作台</a>
+        <a href="/">创作工作台</a>
         <a href="/account?tab=gallery">我的投稿</a>
       </nav>
     </header>
