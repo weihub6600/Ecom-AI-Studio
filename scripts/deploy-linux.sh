@@ -18,9 +18,27 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   exit 1
 fi
 
-git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+# Fetch the requested branch into its remote-tracking ref explicitly.
+# This also works when the server repository was originally cloned
+# with a single-branch fetch refspec.
+git fetch origin \
+  "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+
+if git show-ref \
+  --verify \
+  --quiet \
+  "refs/heads/${BRANCH}"; then
+  git checkout "$BRANCH"
+else
+  echo "[deploy] local branch does not exist; creating tracking branch: $BRANCH"
+
+  git checkout \
+    -b "$BRANCH" \
+    --track "origin/$BRANCH"
+fi
+
+# Deployment only accepts fast-forward updates.
+git merge --ff-only "origin/$BRANCH"
 
 npm ci   --registry="$NPM_REGISTRY"   --no-audit   --no-fund   --progress=false
 
