@@ -336,38 +336,6 @@
   transform:translateY(-5px) scale(.985);
 }
 
-/* ===== Tool/task pages: stop using 8-10px copy ===== */
-.v15-shell .v15-tools-hero p,
-.v15-shell .v15-tasks-hero p{
-  font-size:13px;
-}
-.v15-shell .v15-tools-toolbar input,
-.v15-shell .v15-tools-toolbar button{
-  font-size:12px;
-}
-.v15-shell .v15-tools-card h2{
-  font-size:16px;
-}
-.v15-shell .v15-tools-card p,
-.v15-shell .v15-tools-card>b{
-  font-size:11.5px;
-}
-.v15-shell .v15-tools-card i{
-  font-size:9.5px;
-}
-.v15-shell .v15-task-card strong{
-  font-size:13px;
-}
-.v15-shell .v15-task-main>p{
-  font-size:11.5px;
-}
-.v15-shell .v15-task-meta{
-  font-size:10px;
-}
-.v15-shell .v15-task-action{
-  font-size:11px;
-}
-
 /* ===== Announcement topbar: wider, centered, less cramped ===== */
 .v1501-home + *{}
 .v1501-home .announcement-topbar-wrap{
