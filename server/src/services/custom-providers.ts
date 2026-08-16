@@ -21,7 +21,7 @@ import type {
 } from "../types.js";
 import {
   ProviderHttpError,
-  fetchWithTimeout,
+  fetchSafeExternalWithTimeout,
   readJsonResponse,
   redactProviderDetails
 } from "../utils/http.js";
@@ -1361,7 +1361,7 @@ export function createCustomProviderService(
       init.body = JSON.stringify(prepared.body ?? {});
     }
 
-    const response = await fetchWithTimeout(
+    const response = await fetchSafeExternalWithTimeout(
       prepared.url,
       init,
       prepared.timeoutMs
@@ -1451,7 +1451,7 @@ export function createCustomProviderService(
       url = parsed.toString();
     }
 
-    const pollResponse = await fetchWithTimeout(
+    const pollResponse = await fetchSafeExternalWithTimeout(
       url,
       { method: statusMethod, headers },
       Math.min(prepared.timeoutMs, 120000)
