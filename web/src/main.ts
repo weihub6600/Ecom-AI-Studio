@@ -14,7 +14,6 @@ import "./admin-page.css";
 import "./account-page.css";
 import "./provider-manager.css";
 import "./platform-v15.css";
-import "./platform-v15-visual-polish.css";
 
 function normalizePath(value: string): string {
   const trimmed = value.replace(/\/+$/, "");
