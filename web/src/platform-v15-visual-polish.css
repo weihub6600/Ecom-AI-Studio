@@ -1,17 +1,8 @@
 /* V15.0.1 — visual polish layer */
-:root{
-  --v1501-text:#262837;
-  --v1501-muted:#707587;
-  --v1501-line:#e5e7ef;
-  --v1501-soft:#f5f4fb;
-  --v1501-brand:#6858d4;
-  --v1501-brand-2:#8b72ef;
-}
-
 /* ===== Global V15 typography ===== */
 .v1501-home,
 .v1501-shell{
-  color:var(--v1501-text);
+  color:var(--v15-text);
   -webkit-font-smoothing:antialiased;
 }
 
