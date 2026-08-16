@@ -613,7 +613,7 @@
 .gallery-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--v15-z-lightbox);
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
   padding: 3vw;

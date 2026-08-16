@@ -135,7 +135,7 @@ function applyResult() {
 </template>
 
 <style scoped>
-.optimizer-mask{position:fixed;inset:0;z-index:2600;display:grid;place-items:center;padding:24px;background:rgba(23,25,35,.42);backdrop-filter:blur(8px)}
+.optimizer-mask{position:fixed;inset:0;z-index:var(--v15-z-modal-raised);display:grid;place-items:center;padding:24px;background:rgba(23,25,35,.42);backdrop-filter:blur(8px)}
 .optimizer-dialog{width:min(880px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;border:1px solid #dedfe7;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(24,28,45,.2)}
 .optimizer-dialog>header{display:flex;justify-content:space-between;gap:18px;padding:24px 26px 18px;border-bottom:1px solid #ececf2}
 .optimizer-dialog>header>div{display:grid;gap:5px}

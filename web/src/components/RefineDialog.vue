@@ -107,7 +107,7 @@ function submit() {
 .refine-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 10050;
+  z-index: var(--v15-z-critical);
   display: grid;
   place-items: center;
   padding: 24px;

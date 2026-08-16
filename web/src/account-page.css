@@ -79,7 +79,7 @@
 .history-preview-overlay{
   position:fixed;
   inset:0;
-  z-index:1200;
+  z-index:var(--v15-z-modal-raised);
   display:grid;
   place-items:center;
   padding:32px;

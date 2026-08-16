@@ -982,7 +982,7 @@ textarea { resize: vertical; min-height: 128px; padding: 13px 14px; line-height:
 .lightbox-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--v15-z-lightbox);
   background: rgba(14, 13, 26, .94);
   display: flex;
   align-items: center;
@@ -1958,7 +1958,7 @@ body {
   position:absolute;
   right:0;
   top:48px;
-  z-index:160;
+  z-index:var(--v15-z-popover);
   overflow:hidden;
   border:1px solid #e1e2e8;
   border-radius:12px;
@@ -2277,7 +2277,7 @@ body {
   position:fixed;
   right:24px;
   top:80px;
-  z-index:170;
+  z-index:var(--v15-z-toast);
   display:grid;
   grid-template-columns:38px minmax(0,1fr) auto;
   align-items:center;
@@ -2475,14 +2475,14 @@ body {
 
 /* BATCH8_PHASE3_HOTFIX6_HEADER_STACKING */
 .topbar{
-  z-index:220 !important;
+  z-index:var(--v15-z-topbar) !important;
 }
 .header-v32-popover-wrap{
-  z-index:230 !important;
+  z-index:var(--v15-z-popover) !important;
 }
 .header-v32-account-menu,
 .header-v32-message-menu{
-  z-index:260 !important;
+  z-index:var(--v15-z-popover-raised) !important;
 }
 
 
