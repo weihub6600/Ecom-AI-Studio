@@ -336,48 +336,6 @@
   transform:translateY(-5px) scale(.985);
 }
 
-/* ===== Embedded workbench: improve readability without changing business logic ===== */
-.v15-shell .v15-content .workspace-embedded .panel-heading h2{
-  font-size:18px;
-}
-.v15-shell .v15-content .workspace-embedded .panel-heading p{
-  font-size:12.5px;
-  line-height:1.55;
-}
-.v15-shell .v15-content .workspace-embedded .field-block>label,
-.v15-shell .v15-content .workspace-embedded .label-row label{
-  font-size:13px;
-}
-.v15-shell .v15-content .workspace-embedded .label-row span,
-.v15-shell .v15-content .workspace-embedded .operation-pill,
-.v15-shell .v15-content .workspace-embedded .meta-row span{
-  font-size:11px;
-}
-.v15-shell .v15-content .workspace-embedded .model-copy strong{
-  font-size:14.5px;
-}
-.v15-shell .v15-content .workspace-embedded .model-copy span{
-  font-size:12.5px;
-}
-.v15-shell .v15-content .workspace-embedded .status-tag{
-  font-size:10.5px;
-}
-.v15-shell .v15-content .workspace-embedded .mode-copy strong{
-  font-size:13.5px;
-}
-.v15-shell .v15-content .workspace-embedded .mode-copy small{
-  font-size:11px;
-}
-.v15-shell .v15-content .workspace-embedded .select-control,
-.v15-shell .v15-content .workspace-embedded input[type="text"],
-.v15-shell .v15-content .workspace-embedded input[type="number"],
-.v15-shell .v15-content .workspace-embedded textarea{
-  font-size:13px;
-}
-.v15-shell .v15-content .workspace-embedded button{
-  font-size:max(12px,1em);
-}
-
 /* ===== Tool/task pages: stop using 8-10px copy ===== */
 .v15-shell .v15-tools-hero p,
 .v15-shell .v15-tasks-hero p{
@@ -597,50 +555,6 @@
 }
 .v1501-home .v15-section-heading>p{
   font-size:14.5px;
-}
-
-/* ===== Workbench readability: secondary information should remain readable ===== */
-.v15-shell .v15-content .workspace-embedded .panel-heading p{
-  font-size:13px;
-  line-height:1.5;
-}
-.v15-shell .v15-content .workspace-embedded .field-block>label,
-.v15-shell .v15-content .workspace-embedded .label-row label{
-  font-size:13.5px;
-}
-.v15-shell .v15-content .workspace-embedded .label-row span,
-.v15-shell .v15-content .workspace-embedded .operation-pill,
-.v15-shell .v15-content .workspace-embedded .meta-row span{
-  font-size:11.5px;
-}
-.v15-shell .v15-content .workspace-embedded .model-copy span{
-  font-size:13px;
-  line-height:1.5;
-}
-.v15-shell .v15-content .workspace-embedded .status-tag{
-  font-size:11px;
-}
-.v15-shell .v15-content .workspace-embedded .mode-copy small{
-  font-size:11.8px;
-  line-height:1.45;
-}
-.v15-shell .v15-content .workspace-embedded .select-control,
-.v15-shell .v15-content .workspace-embedded input[type="text"],
-.v15-shell .v15-content .workspace-embedded input[type="number"],
-.v15-shell .v15-content .workspace-embedded textarea{
-  font-size:13.5px;
-}
-.v15-shell .v15-content .workspace-embedded .control-panel small,
-.v15-shell .v15-content .workspace-embedded .preview-panel small,
-.v15-shell .v15-content .workspace-embedded .history-panel small{
-  font-size:max(11.5px,1em);
-}
-
-/* Keep dense metadata compact, but not unreadably small. */
-.v15-shell .v15-content .workspace-embedded .history-panel time,
-.v15-shell .v15-content .workspace-embedded .history-panel .history-meta,
-.v15-shell .v15-content .workspace-embedded .preview-panel .meta-row{
-  font-size:11.5px;
 }
 
 @media(max-width:1180px){
