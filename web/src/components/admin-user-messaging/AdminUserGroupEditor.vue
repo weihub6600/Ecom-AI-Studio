@@ -38,8 +38,8 @@ const draft = props.draft;
           <h3>
             {{
               props.editing
-                ? '??????'
-                : '??????'
+                ? '编辑用户分组'
+                : '创建用户分组'
             }}
           </h3>
         </div>
@@ -48,34 +48,34 @@ const draft = props.draft;
           type="button"
           @click="emit('close')"
         >
-          ?
+          ×
         </button>
       </header>
 
       <label>
-        <span>????</span>
+        <span>分组名称</span>
 
         <input
           v-model="draft.name"
           maxlength="60"
           autofocus
-          placeholder="????????????"
+          placeholder="例如：核心用户、设计团队"
         />
       </label>
 
       <label>
-        <span>????</span>
+        <span>内部说明</span>
 
         <textarea
           v-model="draft.description"
           maxlength="300"
           rows="4"
-          placeholder="???????????????????"
+          placeholder="说明这个分组的用途、运营策略或用户特征"
         ></textarea>
       </label>
 
       <label>
-        <span>????</span>
+        <span>排序权重</span>
 
         <input
           v-model.number="draft.sortOrder"
@@ -90,7 +90,7 @@ const draft = props.draft;
           type="button"
           @click="emit('close')"
         >
-          ??
+          取消
         </button>
 
         <button
@@ -100,10 +100,10 @@ const draft = props.draft;
         >
           {{
             props.saving
-              ? '????'
+              ? '保存中…'
               : props.editing
-                ? '????'
-                : '????'
+                ? '保存修改'
+                : '创建分组'
           }}
         </button>
       </footer>

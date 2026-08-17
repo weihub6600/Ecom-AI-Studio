@@ -46,29 +46,29 @@ function toggleMessage(
     <header class="workspace-head">
       <div>
         <span>DELIVERY ANALYTICS</span>
-        <h3>????</h3>
+        <h3>触达记录</h3>
         <p>
-          ??????????????????
+          查看每次发送的对象、送达量和阅读率。
         </p>
       </div>
 
       <div class="history-metrics">
         <span>
-          ?????
+          当前页送达
           <strong>
             {{ props.totalDelivered }}
           </strong>
         </span>
 
         <span>
-          ?????
+          当前页已读
           <strong>
             {{ props.totalRead }}
           </strong>
         </span>
 
         <span>
-          ???
+          已读率
           <strong>
             {{ props.averageReadRate }}%
           </strong>
@@ -109,7 +109,7 @@ function toggleMessage(
 
             <small>
               {{ targetLabel(item) }}
-              ?
+              ·
               {{
                 formatDate(
                   item.createdAt
@@ -127,7 +127,7 @@ function toggleMessage(
               {{ item.readCount }}
               /
               {{ item.deliveredCount }}
-              ??
+              已读
             </span>
           </div>
 
@@ -135,7 +135,7 @@ function toggleMessage(
             {{
               props.expandedMessageId ===
                 item.id
-                ? '?'
+                ? '−'
                 : '+'
             }}
           </span>
@@ -163,14 +163,14 @@ function toggleMessage(
 
           <div>
             <span>
-              ??
+              送达
               <strong>
                 {{ item.deliveredCount }}
               </strong>
             </span>
 
             <span>
-              ??
+              已读
               <strong>
                 {{ item.readCount }}
               </strong>
@@ -182,7 +182,7 @@ function toggleMessage(
                 emit('remove', item)
               "
             >
-              ????
+              删除消息
             </button>
           </div>
         </div>
@@ -193,11 +193,11 @@ function toggleMessage(
       v-else
       class="ops-empty"
     >
-      <span>?</span>
-      <strong>??????</strong>
+      <span>◇</span>
+      <strong>暂无触达记录</strong>
 
       <p>
-        ???????????????????????
+        发送第一条站内消息后，这里会开始累计阅读数据。
       </p>
     </div>
 
@@ -214,13 +214,13 @@ function toggleMessage(
           )
         "
       >
-        ? ???
+        ← 上一页
       </button>
 
       <span>
-        ? {{ props.pagination.page }}
+        第 {{ props.pagination.page }}
         /
-        {{ props.pagination.totalPages }} ?
+        {{ props.pagination.totalPages }} 页
       </span>
 
       <button
@@ -236,7 +236,7 @@ function toggleMessage(
           )
         "
       >
-        ??? ?
+        下一页 →
       </button>
     </div>
   </section>
