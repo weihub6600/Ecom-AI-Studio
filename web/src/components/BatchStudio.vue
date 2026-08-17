@@ -13,166 +13,28 @@ import {
 } from "../api/client";
 import type {
   AuthUser,
-  GeneratedImage,
   ModelCapability,
   ProviderId
 } from "../types";
+import type {
+  BatchQueueState,
+  BatchRow,
+  BatchTemplateColumnKey,
+  BatchTemplateRecord,
+  PersistedBatchState,
+  ServerBatchJob,
+  ZipTextReader
+} from "./batch-studio/types";
 import {
   formatPoints
 } from "../utils/format";
 import BatchTemplateManager from "./BatchTemplateManager.vue";
-
-type BatchRowStatus =
-  | "draft"
-  | "ready"
-  | "running"
-  | "success"
-  | "failed";
-
-type BatchQueueState =
-  | "idle"
-  | "running"
-  | "pausing"
-  | "paused"
-  | "completed";
-
-
-interface BatchRow {
-  id: string;
-  productName: string;
-  prompt: string;
-  negativePrompt: string;
-  provider: ProviderId | "";
-  model: string;
-  size: string;
-  count: number;
-  referenceImageUrl: string;
-  status: BatchRowStatus;
-  validationErrors: string[];
-  progress: string;
-  error?: string;
-  warning?: string;
-  historyId?: string;
-  taskId?: string;
-  images: GeneratedImage[];
-  pointsCost?: number;
-}
-
-interface PersistedBatchState {
-  version: 1;
-  batchName: string;
-  folderId?: string;
-  defaultProvider: ProviderId;
-  defaultModel: string;
-  defaultSize: string;
-  defaultCount: number;
-  queueState: BatchQueueState;
-  rows: BatchRow[];
-  updatedAt: string;
-}
-
-
-type ServerBatchStatus =
-  | "draft"
-  | "queued"
-  | "running"
-  | "pausing"
-  | "paused"
-  | "completed"
-  | "cancelled";
-
-interface ServerBatchItem {
-  id: string;
-  position: number;
-  productName: string;
-  prompt: string;
-  negativePrompt?: string;
-  provider: string;
-  model: string;
-  operation: "text-to-image" | "image-edit";
-  size: string;
-  count: number;
-  referenceImageUrl?: string;
-  status: "queued" | "running" | "success" | "failed";
-  progress?: string;
-  error?: string;
-  warning?: string;
-  generationTaskId?: string;
-  providerTaskId?: string;
-  historyId?: string;
-  pointsCost: number;
-  attempts: number;
-  images: GeneratedImage[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ServerBatchJob {
-  id: string;
-  userId: string;
-  username: string;
-  name: string;
-  folderId?: string;
-  status: ServerBatchStatus;
-  totalItems: number;
-  successItems: number;
-  failedItems: number;
-  runningItems: number;
-  queuedItems: number;
-  progress: number;
-  estimatedPoints: number;
-  actualPoints: number;
-  lastError?: string;
-  createdAt: string;
-  updatedAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  items?: ServerBatchItem[];
-}
-
-interface BatchTemplateColumnMapping {
-  productName?: string;
-  prompt?: string;
-  negativePrompt?: string;
-  provider?: string;
-  model?: string;
-  size?: string;
-  count?: string;
-  referenceImageUrl?: string;
-}
-
-interface BatchTemplateRecord {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  provider: string;
-  model: string;
-  size: string;
-  count: number;
-  promptTemplate: string;
-  negativePromptTemplate?: string;
-  referenceImageUrl?: string;
-  columnMapping: BatchTemplateColumnMapping;
-  createdAt: string;
-  updatedAt: string;
-  lastUsedAt?: string;
-}
-
-type BatchTemplateColumnKey =
-  keyof BatchTemplateColumnMapping;
 
 const providerOptions: ProviderId[] = [
   "grsai",
   "nanobanana",
   "lingke"
 ];
-
-interface ZipTextReader {
-  file(path: string): {
-    async(type: "string"): Promise<string>;
-  } | null;
-}
 
 const props = defineProps<{
   user: AuthUser
