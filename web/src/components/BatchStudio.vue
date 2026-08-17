@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -547,7 +548,7 @@ function removeRow(rowId: string) {
   }
 }
 
-function clearQueue() {
+async function clearQueue() {
   if (queueBusy.value) return;
 
   if (activeBatchId.value) {
@@ -557,7 +558,7 @@ function clearQueue() {
 
   if (
     rows.value.length > 0 &&
-    !window.confirm(
+    !await platformConfirm(
       "确定清空当前草稿吗？"
     )
   ) {
@@ -846,7 +847,7 @@ async function handleImportFile(
 
     if (
       rows.value.length > 0 &&
-      !window.confirm(
+      !await platformConfirm(
         `当前批次已有 ${rows.value.length} 条任务。确定用新表格替换吗？`
       )
     ) {

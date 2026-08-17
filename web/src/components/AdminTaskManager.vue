@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -266,7 +267,7 @@ async function loadTasks(
 
 async function recover() {
   if (
-    !window.confirm(
+    !await platformConfirm(
       "运行一次任务恢复扫描？系统会检查未完成任务并尝试恢复正常结算。"
     )
   ) {
@@ -305,7 +306,7 @@ async function failRefund(
   task: Task
 ) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `确定终止 ${task.username} 的异常任务并退款？\n\n模型：${task.model}\n任务：${task.id}`
     )
   ) {

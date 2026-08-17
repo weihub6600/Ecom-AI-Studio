@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -291,7 +292,7 @@ async function closeFeedback() {
   }
 
   if (
-    !window.confirm(
+    !await platformConfirm(
       "确定关闭这条反馈吗？关闭后不能继续补充。"
     )
   ) {

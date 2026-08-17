@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "./services/platform-feedback";
 // V14_4_0_PROMPT_OPTIMIZER_ADMIN_FINAL
 import RegistrationSettingsPanel from "./components/RegistrationSettingsPanel.vue";
 import InvitationSettingsPanel from "./components/InvitationSettingsPanel.vue";
@@ -183,7 +184,7 @@ async function saveUsername() {
 async function setUserStatus(status: AdminUserSummary["status"]) {
   if (!selectedUser.value) return;
   const label = status === "active" ? "启用" : status === "disabled" ? "封禁" : status === "rejected" ? "拒绝" : "退回待审核";
-  if (!window.confirm(`确定${label}用户“${selectedUser.value.username}”吗？`)) return;
+  if (!await platformConfirm(`确定${label}用户“${selectedUser.value.username}”吗？`)) return;
   await updateUser({ status });
 }
 
@@ -219,7 +220,7 @@ async function adjustCredits(direction: 1 | -1) {
   }
   const signed = amount * direction;
   const verb = direction > 0 ? "增加" : "扣减";
-  if (!window.confirm(`确定为“${selectedUser.value.username}”${verb} ${formatPoints(amount)} 积分吗？`)) return;
+  if (!await platformConfirm(`确定为“${selectedUser.value.username}”${verb} ${formatPoints(amount)} 积分吗？`)) return;
   await runLoading(async () => {
     const data = await apiRequest<{ user: AdminUserSummary }>(
       `/api/admin/users/${encodeURIComponent(selectedUser.value!.id)}/credits`,
@@ -235,7 +236,7 @@ async function adjustCredits(direction: 1 | -1) {
 
 async function forceLogout() {
   if (!selectedUser.value || selectedUserIsSelf.value) return;
-  if (!window.confirm(`确定强制退出“${selectedUser.value.username}”的全部设备吗？`)) return;
+  if (!await platformConfirm(`确定强制退出“${selectedUser.value.username}”的全部设备吗？`)) return;
   await runLoading(async () => {
     await apiRequest(`/api/admin/users/${encodeURIComponent(selectedUser.value!.id)}/logout`, { method: "POST" });
     successMessage.value = "该用户的全部登录会话已失效";
@@ -271,7 +272,7 @@ async function generateCards() {
 }
 
 async function deleteCard(card: RechargeCard) {
-  if (card.status !== "unused" || !window.confirm(`确定删除卡密 ${card.codePreview} 吗？`)) return;
+  if (card.status !== "unused" || !await platformConfirm(`确定删除卡密 ${card.codePreview} 吗？`)) return;
   await runLoading(async () => {
     await apiRequest(`/api/admin/cards/${encodeURIComponent(card.id)}`, { method: "DELETE" });
     successMessage.value = "未使用卡密已删除";

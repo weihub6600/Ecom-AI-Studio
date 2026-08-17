@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -755,7 +756,7 @@ function startCreateProviderWithPreset(presetId: ProviderPresetId) {
   applyProviderPreset(presetId, false);
 }
 
-function applyProviderPreset(
+async function applyProviderPreset(
   presetId: ProviderPresetId,
   confirmOverwrite = true
 ) {
@@ -763,7 +764,7 @@ function applyProviderPreset(
     confirmOverwrite &&
     !creatingProvider.value &&
     selectedKind.value === "generic" &&
-    !window.confirm("套用模板会覆盖当前连接与协议字段，但不会清除已保存的 API Key。继续吗？")
+    !await platformConfirm("套用模板会覆盖当前连接与协议字段，但不会清除已保存的 API Key。继续吗？")
   ) {
     return;
   }
@@ -913,7 +914,7 @@ async function cloneProvider() {
   clearMessages();
 
   if (selected.kind === "generic") {
-    if (!window.confirm(`复制“${selected.displayName}”以及它的全部模型吗？副本默认停用，API Key 会在服务端安全复制。`)) {
+    if (!await platformConfirm(`复制“${selected.displayName}”以及它的全部模型吗？副本默认停用，API Key 会在服务端安全复制。`)) {
       return;
     }
 
@@ -966,7 +967,7 @@ async function cloneModel() {
     return;
   }
 
-  if (!window.confirm(`复制模型“${model.name}”吗？副本默认停用。`)) {
+  if (!await platformConfirm(`复制模型“${model.name}”吗？副本默认停用。`)) {
     return;
   }
 
@@ -1357,7 +1358,7 @@ async function saveBuiltInProvider() {
 
   if (
     providerDraft.clearApiKey &&
-    !window.confirm(`确定清除 ${provider.displayName} 的 API Key 吗？`)
+    !await platformConfirm(`确定清除 ${provider.displayName} 的 API Key 吗？`)
   ) {
     return;
   }
@@ -1395,7 +1396,7 @@ async function saveBuiltInProvider() {
 async function deleteProvider() {
   const provider = selectedGeneric.value;
   if (!provider) return;
-  if (!window.confirm(`确定删除“${provider.displayName}”及其全部模型吗？`)) return;
+  if (!await platformConfirm(`确定删除“${provider.displayName}”及其全部模型吗？`)) return;
 
   saving.value = "provider-delete";
   clearMessages();
@@ -1587,7 +1588,7 @@ async function deleteModel() {
   const provider = selectedGeneric.value;
   const model = selectedModel.value;
   if (!provider || !model || selectedKind.value !== "generic") return;
-  if (!window.confirm(`确定删除模型“${model.name}”吗？`)) return;
+  if (!await platformConfirm(`确定删除模型“${model.name}”吗？`)) return;
 
   saving.value = "model-delete";
   clearMessages();
@@ -1639,7 +1640,7 @@ async function runTest() {
     return;
   }
 
-  if (!window.confirm("真实测试会调用第三方 API，并可能产生第三方费用，但不会扣本站用户积分。继续吗？")) {
+  if (!await platformConfirm("真实测试会调用第三方 API，并可能产生第三方费用，但不会扣本站用户积分。继续吗？")) {
     return;
   }
 

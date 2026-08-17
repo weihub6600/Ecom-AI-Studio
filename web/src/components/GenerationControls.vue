@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm, platformToast } from "../services/platform-feedback";
 // V14_4_0_2_1_AI_PROMPT_BUTTON_TEXT_FIX
 // V14_4_0_2_AI_PROMPT_BUTTON_TEXT
 // V14_4_0_1_PROMPT_BUTTON_LAYOUT
@@ -118,12 +119,12 @@ function createPresetId(): string {
 function saveCurrentPrompt() {
   const value = prompt.value.trim();
   if (!value) {
-    window.alert("请先填写提示词，再保存预设。");
+    platformToast("请先填写提示词，再保存预设。");
     promptInput.value?.focus();
     return;
   }
   if (promptPresets.value.length >= MAX_PROMPT_PRESETS) {
-    window.alert(`最多只能保存 ${MAX_PROMPT_PRESETS} 组预设提示词，请先删除一组。`);
+    platformToast(`最多只能保存 ${MAX_PROMPT_PRESETS} 组预设提示词，请先删除一组。`);
     return;
   }
 
@@ -146,8 +147,8 @@ function usePreset(preset: PromptPreset) {
   prompt.value = preset.prompt;
 }
 
-function deletePreset(preset: PromptPreset) {
-  if (!window.confirm(`确定删除预设“${preset.name}”吗？`)) return;
+async function deletePreset(preset: PromptPreset) {
+  if (!await platformConfirm(`确定删除预设“${preset.name}”吗？`)) return;
   promptPresets.value = promptPresets.value.filter((item) => item.id !== preset.id);
   persistPromptPresets();
 }
@@ -201,11 +202,11 @@ async function useCustomPrompt() {
 
 function openPromptOptimizer() {
   if (!props.isAuthenticated) {
-    window.alert("登录后即可使用 AI 优化提示词提示词。");
+    platformToast("登录后即可使用 AI 优化提示词提示词。");
     return;
   }
   if (prompt.value.trim().length < 2) {
-    window.alert("请先输入至少 2 个字符的提示词。");
+    platformToast("请先输入至少 2 个字符的提示词。");
     promptInput.value?.focus();
     return;
   }

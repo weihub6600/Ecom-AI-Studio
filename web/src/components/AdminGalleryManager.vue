@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { apiRequest, jsonRequest } from "../api/client";
 import type { GalleryAdminSummary, GalleryItem, Pagination } from "../types";
@@ -115,7 +116,7 @@ async function load(page = 1) {
 }
 
 async function approve(item: GalleryItem) {
-  if (!window.confirm(`通过“${displayTitle(item)}”并公开展示吗？`)) return;
+  if (!await platformConfirm(`通过“${displayTitle(item)}”并公开展示吗？`)) return;
   await update(item, { status: "approved" }, "作品已通过审核");
 }
 
@@ -151,7 +152,7 @@ async function deleteSubmission(item: GalleryItem) {
   }
 
   if (
-    !window.confirm(
+    !await platformConfirm(
       `永久删除投稿记录“${displayTitle(item)}”吗？原始生成作品不会被删除。`
     )
   ) {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import { computed, onMounted, reactive, ref } from "vue";
 import { apiRequest, jsonRequest } from "../api/client";
 import type { StoragePackage, StorageSettings } from "../types";
@@ -185,7 +186,7 @@ async function savePackage() {
 }
 
 async function removePackage(item: StoragePackage) {
-  if (!window.confirm(`删除存储方案“${item.name}”吗？已兑换权益不会受影响。`)) return;
+  if (!await platformConfirm(`删除存储方案“${item.name}”吗？已兑换权益不会受影响。`)) return;
 
   errorMessage.value = "";
 

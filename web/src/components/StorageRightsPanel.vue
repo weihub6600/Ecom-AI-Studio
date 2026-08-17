@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import { computed, onMounted, ref } from "vue";
 import { apiRequest, jsonRequest } from "../api/client";
 import type { AuthUser, StorageAccountSummary, StoragePackage } from "../types";
@@ -35,7 +36,7 @@ async function load() {
 
 async function redeem(item: StoragePackage) {
   if (props.user.role === "admin") return;
-  if (!window.confirm(`使用 ${formatPoints(item.pointsCost)} 积分兑换“${item.name}”吗？`)) return;
+  if (!await platformConfirm(`使用 ${formatPoints(item.pointsCost)} 积分兑换“${item.name}”吗？`)) return;
 
   redeemingId.value = item.id;
   message.value = "";

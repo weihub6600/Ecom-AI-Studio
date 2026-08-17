@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "./services/platform-feedback";
 // V14_3_1_3_1_PASS_MODELS_TO_HISTORY
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AnnouncementBar from "./components/AnnouncementBar.vue";
@@ -656,7 +657,7 @@ async function restoreHistory(record: ServerHistoryRecord, scrollToResult = true
 }
 
 async function deleteHistory(record: ServerHistoryRecord) {
-  if (!window.confirm("确定删除这条生成历史及服务器原图吗？删除后无法恢复。")) return;
+  if (!await platformConfirm("确定删除这条生成历史及服务器原图吗？删除后无法恢复。")) return;
   try {
     await apiRequest<{ success: boolean }>(`/api/history/${encodeURIComponent(record.id)}`, { method: "DELETE" });
     historyRecords.value = historyRecords.value.filter((item) => item.id !== record.id);
@@ -1008,7 +1009,7 @@ async function handleRefineConfirm(
 }
 
 async function clearHistory() {
-  if (!historyRecords.value.length || !window.confirm("确定清空当前账号的生成历史及服务器原图吗？删除后无法恢复。")) return;
+  if (!historyRecords.value.length || !await platformConfirm("确定清空当前账号的生成历史及服务器原图吗？删除后无法恢复。")) return;
   try {
     await apiRequest<{ success: boolean }>("/api/history", { method: "DELETE" });
     historyRecords.value = [];

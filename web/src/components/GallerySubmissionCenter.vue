@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import { computed, onMounted, ref } from "vue";
 import { apiRequest, jsonRequest } from "../api/client";
 import type { GalleryEligibleWork, GalleryItem } from "../types";
@@ -113,7 +114,7 @@ async function handleSubmissionAction(item: GalleryItem) {
     ? `确定撤回“${displayTitle(item)}”吗？`
     : `确定永久删除这条投稿记录“${displayTitle(item)}”吗？`;
 
-  if (!window.confirm(confirmText)) return;
+  if (!await platformConfirm(confirmText)) return;
 
   errorMessage.value = "";
 

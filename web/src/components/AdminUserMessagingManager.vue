@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -474,7 +475,7 @@ async function removeGroup(
   group: UserGroup
 ) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `删除分组“${group.name}”吗？用户账号不会删除，历史消息也会保留。`
     )
   ) {
@@ -688,7 +689,7 @@ async function bulkAddGroup() {
   if (!group) return;
 
   if (
-    !window.confirm(
+    !await platformConfirm(
       `将 ${selectedUserIds.value.length} 位用户加入“${group.name}”吗？`
     )
   ) {
@@ -951,7 +952,7 @@ async function sendMessage() {
           "所选用户";
 
   if (
-    !window.confirm(
+    !await platformConfirm(
       `确定向“${targetDescription}”发送站内消息吗？`
     )
   ) {
@@ -1020,7 +1021,7 @@ async function removeMessage(
     AdminSiteMessage
 ) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `删除站内消息“${item.title}”吗？用户收件箱中的该条消息也会同步移除。`
     )
   ) {

@@ -9,6 +9,7 @@ import TasksPage from "./pages/TasksPage.vue";
 import ToolsPage from "./pages/ToolsPage.vue";
 import AdminApp from "./AdminApp.vue";
 import AccountApp from "./AccountApp.vue";
+import PlatformFeedbackHost from "./components/PlatformFeedbackHost.vue";
 import "./style.css";
 import "./admin-page.css";
 import "./account-page.css";
@@ -51,3 +52,19 @@ const Page =
                   : HomeApp;
 
 createApp(Page).mount("#app");
+
+const feedbackRoot =
+  document.createElement("div");
+
+feedbackRoot.id =
+  "platform-feedback-root";
+
+document.body.appendChild(
+  feedbackRoot
+);
+
+createApp(
+  PlatformFeedbackHost
+).mount(
+  feedbackRoot
+);

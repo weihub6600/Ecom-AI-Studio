@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 // V14_3_1_2_1_NEWLINE_COMPILE_FIX
 import {
   computed,
@@ -404,7 +405,7 @@ async function remove(
   item: Announcement
 ) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `确定删除公告“${item.title}”吗？`
     )
   ) {

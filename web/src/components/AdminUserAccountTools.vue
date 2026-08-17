@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import { ref, watch } from "vue";
 import { apiRequest, jsonRequest } from "../api/client";
 import type { AdminUserSummary } from "../types";
@@ -51,7 +52,7 @@ async function resetPassword() {
     errorMessage.value = "临时密码长度需为 8–128 位";
     return;
   }
-  if (!window.confirm(`确定重置“${props.user.username}”的密码吗？该用户全部登录会话会立即失效。`)) {
+  if (!await platformConfirm(`确定重置“${props.user.username}”的密码吗？该用户全部登录会话会立即失效。`)) {
     return;
   }
 

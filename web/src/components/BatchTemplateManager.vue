@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onMounted,
@@ -517,7 +518,7 @@ async function deleteTemplate() {
   if (
     !template ||
     saving.value ||
-    !window.confirm(
+    !await platformConfirm(
       `确定删除模板“${template.name}”吗？`
     )
   ) {
@@ -607,7 +608,7 @@ async function cloneActiveBatch(
 
   if (
     start &&
-    !window.confirm(
+    !await platformConfirm(
       "复制当前批次并立即重新生产全部商品吗？新批次会重新扣除积分。"
     )
   ) {

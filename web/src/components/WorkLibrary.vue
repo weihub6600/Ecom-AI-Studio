@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { platformConfirm } from "../services/platform-feedback";
 import {
   computed,
   onBeforeUnmount,
@@ -459,7 +460,7 @@ async function deleteFolder(
   folder: LibraryFolder
 ) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `删除文件夹“${folder.name}”？文件夹中的作品会回到未分类。`
     )
   ) {
@@ -513,7 +514,7 @@ async function createTag() {
 
 async function deleteTag(tag: LibraryTag) {
   if (
-    !window.confirm(
+    !await platformConfirm(
       `删除标签“${tag.name}”？作品本身不会被删除。`
     )
   ) {
@@ -680,7 +681,7 @@ async function batchAction(
 
 async function emptyTrash() {
   if (
-    !window.confirm(
+    !await platformConfirm(
       "确定清空回收站吗？作品将不再出现在作品库中，服务器原图文件仍保留。"
     )
   ) {
