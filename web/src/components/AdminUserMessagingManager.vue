@@ -19,6 +19,7 @@ import type {
 import AdminUserGroupEditor from "./admin-user-messaging/AdminUserGroupEditor.vue";
 import AdminAudienceSegmentStrip from "./admin-user-messaging/AdminAudienceSegmentStrip.vue";
 import AdminAudienceMemberTable from "./admin-user-messaging/AdminAudienceMemberTable.vue";
+import AdminAudienceMemberControls from "./admin-user-messaging/AdminAudienceMemberControls.vue";
 import AdminMessageDeliveryHistory from "./admin-user-messaging/AdminMessageDeliveryHistory.vue";
 import AdminMessagePreview from "./admin-user-messaging/AdminMessagePreview.vue";
 
@@ -1170,100 +1171,20 @@ function messageOf(
           </div>
         </header>
 
-        <div class="member-toolbar">
-          <div class="member-search">
-            <span>⌕</span>
-            <input
-              v-model="userSearch"
-              type="search"
-              placeholder="搜索用户名或昵称"
-              @keyup.enter="
-                loadUsers(1)
-              "
-            />
-          </div>
-
-          <select
-            v-model="userStatus"
-          >
-            <option value="">
-              全部状态
-            </option>
-            <option value="active">
-              已启用
-            </option>
-            <option value="pending">
-              待审核
-            </option>
-            <option value="disabled">
-              已封禁
-            </option>
-            <option value="rejected">
-              已拒绝
-            </option>
-          </select>
-
-          <button
-            type="button"
-            class="toolbar-search"
-            @click="loadUsers(1)"
-          >
-            查询
-          </button>
-        </div>
-
-        <div
-          v-if="
-            selectedUserIds.length > 0
-          "
-          class="bulk-bar"
-        >
-          <div>
-            <span>
-              已选择
-              <strong>
-                {{ selectedUserIds.length }}
-              </strong>
-              位用户
-            </span>
-
-            <button
-              type="button"
-              @click="
-                selectedUserIds = []
-              "
-            >
-              取消选择
-            </button>
-          </div>
-
-          <div>
-            <select
-              v-model="bulkGroupId"
-            >
-              <option value="">
-                选择目标分组
-              </option>
-
-              <option
-                v-for="group in groups"
-                :key="group.id"
-                :value="group.id"
-              >
-                {{ group.name }}
-              </option>
-            </select>
-
-            <button
-              type="button"
-              class="ops-primary"
-              :disabled="saving"
-              @click="bulkAddGroup"
-            >
-              批量加入分组
-            </button>
-          </div>
-        </div>
+        <AdminAudienceMemberControls
+          :user-search="userSearch"
+          :user-status="userStatus"
+          :selected-count="selectedUserIds.length"
+          :bulk-group-id="bulkGroupId"
+          :groups="groups"
+          :saving="saving"
+          @update:user-search="userSearch = $event"
+          @update:user-status="userStatus = $event"
+          @update:bulk-group-id="bulkGroupId = $event"
+          @search="loadUsers(1)"
+          @clear-selection="selectedUserIds = []"
+          @bulk-add="bulkAddGroup"
+        />
 
         <AdminAudienceMemberTable
           :users="filteredUsers"
