@@ -20,12 +20,10 @@ import {
   formatDate
 } from "../utils/format";
 import {
-  kindLabel,
-  readRate,
-  statusLabel,
-  targetLabel
+  statusLabel
 } from "./admin-user-messaging/presentation";
 import AdminUserGroupEditor from "./admin-user-messaging/AdminUserGroupEditor.vue";
+import AdminMessageDeliveryHistory from "./admin-user-messaging/AdminMessageDeliveryHistory.vue";
 
 type Tab =
   | "segments"
@@ -1981,207 +1979,18 @@ function messageOf(
         </aside>
       </section>
 
-      <section class="delivery-history">
-        <header class="workspace-head">
-          <div>
-            <span>DELIVERY ANALYTICS</span>
-            <h3>触达记录</h3>
-            <p>
-              查看每次发送的对象、送达量和阅读率。
-            </p>
-          </div>
+      <AdminMessageDeliveryHistory
+        :messages="messages"
+        :pagination="messagesPagination"
+        :total-delivered="totalDelivered"
+        :total-read="totalRead"
+        :average-read-rate="averageReadRate"
+        :expanded-message-id="expandedMessageId"
+        @toggle="expandedMessageId = $event"
+        @page-change="loadMessages"
+        @remove="removeMessage"
+      />
 
-          <div class="history-metrics">
-            <span>
-              当前页送达
-              <strong>
-                {{ totalDelivered }}
-              </strong>
-            </span>
-
-            <span>
-              当前页已读
-              <strong>
-                {{ totalRead }}
-              </strong>
-            </span>
-
-            <span>
-              已读率
-              <strong>
-                {{ averageReadRate }}%
-              </strong>
-            </span>
-          </div>
-        </header>
-
-        <div
-          v-if="messages.length"
-          class="delivery-list"
-        >
-          <article
-            v-for="item in messages"
-            :key="item.id"
-            :class="{
-              expanded:
-                expandedMessageId ===
-                item.id
-            }"
-          >
-            <button
-              type="button"
-              class="delivery-main"
-              @click="
-                expandedMessageId =
-                  expandedMessageId ===
-                    item.id
-                    ? ''
-                    : item.id
-              "
-            >
-              <i
-                :class="item.kind"
-              >
-                {{
-                  kindLabel(
-                    item.kind
-                  )
-                }}
-              </i>
-
-              <div class="delivery-copy">
-                <strong>
-                  {{ item.title }}
-                </strong>
-
-                <small>
-                  {{ targetLabel(item) }}
-                  ·
-                  {{
-                    formatDate(
-                      item.createdAt
-                    )
-                  }}
-                </small>
-              </div>
-
-              <div class="delivery-rate">
-                <b>
-                  {{ readRate(item) }}%
-                </b>
-                <span>
-                  {{ item.readCount }}
-                  /
-                  {{ item.deliveredCount }}
-                  已读
-                </span>
-              </div>
-
-              <span class="delivery-chevron">
-                {{
-                  expandedMessageId ===
-                    item.id
-                    ? '−'
-                    : '+'
-                }}
-              </span>
-            </button>
-
-            <div class="delivery-progress">
-              <span
-                :style="{
-                  width:
-                    `${readRate(item)}%`
-                }"
-              ></span>
-            </div>
-
-            <div
-              v-if="
-                expandedMessageId ===
-                item.id
-              "
-              class="delivery-detail"
-            >
-              <p>
-                {{ item.content }}
-              </p>
-
-              <div>
-                <span>
-                  送达
-                  <strong>
-                    {{ item.deliveredCount }}
-                  </strong>
-                </span>
-
-                <span>
-                  已读
-                  <strong>
-                    {{ item.readCount }}
-                  </strong>
-                </span>
-
-                <button
-                  type="button"
-                  @click.stop="
-                    removeMessage(item)
-                  "
-                >
-                  删除消息
-                </button>
-              </div>
-            </div>
-          </article>
-        </div>
-
-        <div
-          v-else
-          class="ops-empty"
-        >
-          <span>◇</span>
-          <strong>暂无触达记录</strong>
-          <p>
-            发送第一条站内消息后，这里会开始累计阅读数据。
-          </p>
-        </div>
-
-        <div class="ops-pagination">
-          <button
-            type="button"
-            :disabled="
-              messagesPagination.page <= 1
-            "
-            @click="
-              loadMessages(
-                messagesPagination.page - 1
-              )
-            "
-          >
-            ← 上一页
-          </button>
-
-          <span>
-            第 {{ messagesPagination.page }}
-            / {{ messagesPagination.totalPages }} 页
-          </span>
-
-          <button
-            type="button"
-            :disabled="
-              messagesPagination.page >=
-              messagesPagination.totalPages
-            "
-            @click="
-              loadMessages(
-                messagesPagination.page + 1
-              )
-            "
-          >
-            下一页 →
-          </button>
-        </div>
-      </section>
     </template>
   </div>
 </template>
