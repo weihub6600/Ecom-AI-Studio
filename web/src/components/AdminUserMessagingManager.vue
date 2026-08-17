@@ -23,6 +23,7 @@ import {
   statusLabel
 } from "./admin-user-messaging/presentation";
 import AdminUserGroupEditor from "./admin-user-messaging/AdminUserGroupEditor.vue";
+import AdminAudienceSegmentStrip from "./admin-user-messaging/AdminAudienceSegmentStrip.vue";
 import AdminMessageDeliveryHistory from "./admin-user-messaging/AdminMessageDeliveryHistory.vue";
 import AdminMessagePreview from "./admin-user-messaging/AdminMessagePreview.vue";
 
@@ -1146,98 +1147,15 @@ function messageOf(
     <template
       v-else-if="tab === 'segments'"
     >
-      <section class="segment-strip">
-        <div class="segment-strip-head">
-          <div>
-            <span>AUDIENCE SEGMENTS</span>
-            <h3>用户分组</h3>
-          </div>
-
-          <button
-            type="button"
-            class="ops-primary"
-            @click="openCreateGroup"
-          >
-            ＋ 新建分组
-          </button>
-        </div>
-
-        <div class="segment-cards">
-          <button
-            type="button"
-            class="segment-card all"
-            :class="{
-              active:
-                activeGroupFilter ===
-                'all'
-            }"
-            @click="
-              setGroupFilter('all')
-            "
-          >
-            <span>ALL USERS</span>
-            <strong>全部用户</strong>
-            <b>
-              {{ usersPagination.total }}
-            </b>
-            <small>查看当前筛选结果</small>
-          </button>
-
-          <article
-            v-for="group in targetGroups"
-            :key="group.id"
-            class="segment-card"
-            :class="{
-              active:
-                activeGroupFilter ===
-                group.id
-            }"
-          >
-            <button
-              type="button"
-              class="segment-card-main"
-              @click="
-                setGroupFilter(group.id)
-              "
-            >
-              <span>SEGMENT</span>
-              <strong>
-                {{ group.name }}
-              </strong>
-              <b>
-                {{ group.memberCount }}
-              </b>
-              <small>
-                {{
-                  group.description ||
-                  '暂无分组说明'
-                }}
-              </small>
-            </button>
-
-            <footer>
-              <button
-                type="button"
-                @click="
-                  startEditGroup(group)
-                "
-              >
-                编辑
-              </button>
-
-              <button
-                type="button"
-                class="danger"
-                @click="
-                  removeGroup(group)
-                "
-              >
-                删除
-              </button>
-            </footer>
-          </article>
-        </div>
-      </section>
+      <AdminAudienceSegmentStrip
+        :groups="targetGroups"
+        :active-group-filter="activeGroupFilter"
+        :total-users="usersPagination.total"
+        @create="openCreateGroup"
+        @select="setGroupFilter"
+        @edit="startEditGroup"
+        @remove="removeGroup"
+      />
 
       <section class="member-workspace">
         <header class="workspace-head">
