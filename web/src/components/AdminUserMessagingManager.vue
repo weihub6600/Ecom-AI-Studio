@@ -16,14 +16,9 @@ import type {
   Pagination,
   UserGroup
 } from "../types";
-import {
-  formatDate
-} from "../utils/format";
-import {
-  statusLabel
-} from "./admin-user-messaging/presentation";
 import AdminUserGroupEditor from "./admin-user-messaging/AdminUserGroupEditor.vue";
 import AdminAudienceSegmentStrip from "./admin-user-messaging/AdminAudienceSegmentStrip.vue";
+import AdminAudienceMemberTable from "./admin-user-messaging/AdminAudienceMemberTable.vue";
 import AdminMessageDeliveryHistory from "./admin-user-messaging/AdminMessageDeliveryHistory.vue";
 import AdminMessagePreview from "./admin-user-messaging/AdminMessagePreview.vue";
 
@@ -1270,202 +1265,19 @@ function messageOf(
           </div>
         </div>
 
-        <div class="member-table">
-          <div class="member-table-head">
-            <label class="select-box">
-              <input
-                type="checkbox"
-                :checked="
-                  allVisibleSelected
-                "
-                @change="
-                  toggleAllVisible
-                "
-              />
-              <span></span>
-            </label>
+        <AdminAudienceMemberTable
+          :users="filteredUsers"
+          :groups="groups"
+          :selected-user-ids="selectedUserIds"
+          :all-visible-selected="allVisibleSelected"
+          :pagination="usersPagination"
+          @toggle-all="toggleAllVisible"
+          @toggle-user="toggleUserSelection"
+          @toggle-group="toggleGroup"
+          @save="saveOneUserGroups"
+          @page-change="loadUsers"
+        />
 
-            <span>用户</span>
-            <span>状态</span>
-            <span>所属分组</span>
-            <span>最近登录</span>
-            <span>操作</span>
-          </div>
-
-          <article
-            v-for="user in filteredUsers"
-            :key="user.id"
-            class="member-row"
-            :class="{
-              selected:
-                selectedUserIds
-                  .includes(user.id)
-            }"
-          >
-            <label class="select-box">
-              <input
-                type="checkbox"
-                :checked="
-                  selectedUserIds
-                    .includes(user.id)
-                "
-                @change="
-                  toggleUserSelection(
-                    user.id
-                  )
-                "
-              />
-              <span></span>
-            </label>
-
-            <div class="member-user">
-              <b>
-                {{
-                  (
-                    user.nickname ||
-                    user.username
-                  )
-                    .slice(0, 1)
-                    .toUpperCase()
-                }}
-              </b>
-
-              <div>
-                <strong>
-                  {{
-                    user.nickname ||
-                    user.username
-                  }}
-                </strong>
-
-                <small>
-                  {{ user.username }}
-                </small>
-              </div>
-            </div>
-
-            <i
-              class="member-status"
-              :class="user.status"
-            >
-              {{ statusLabel(user.status) }}
-            </i>
-
-            <div class="group-chip-list">
-              <label
-                v-for="group in groups"
-                :key="group.id"
-                :class="{
-                  active:
-                    hasGroup(
-                      user,
-                      group.id
-                    )
-                }"
-              >
-                <input
-                  type="checkbox"
-                  :checked="
-                    hasGroup(
-                      user,
-                      group.id
-                    )
-                  "
-                  @change="
-                    toggleGroup(
-                      user,
-                      group.id
-                    )
-                  "
-                />
-                <span>
-                  {{ group.name }}
-                </span>
-              </label>
-
-              <em
-                v-if="groups.length === 0"
-              >
-                暂无分组
-              </em>
-            </div>
-
-            <time>
-              {{
-                user.lastLoginAt
-                  ? formatDate(
-                      user.lastLoginAt
-                    )
-                  : '从未登录'
-              }}
-            </time>
-
-            <button
-              type="button"
-              class="row-save"
-              :disabled="
-                groups.length === 0
-              "
-              @click="
-                saveOneUserGroups(
-                  user
-                )
-              "
-            >
-              保存
-            </button>
-          </article>
-
-          <div
-            v-if="
-              filteredUsers.length ===
-              0
-            "
-            class="ops-empty"
-          >
-            <span>◎</span>
-            <strong>没有匹配用户</strong>
-            <p>
-              可以调整搜索条件或切换用户分组。
-            </p>
-          </div>
-        </div>
-
-        <div class="ops-pagination">
-          <button
-            type="button"
-            :disabled="
-              usersPagination.page <= 1
-            "
-            @click="
-              loadUsers(
-                usersPagination.page - 1
-              )
-            "
-          >
-            ← 上一页
-          </button>
-
-          <span>
-            第 {{ usersPagination.page }}
-            / {{ usersPagination.totalPages }} 页
-          </span>
-
-          <button
-            type="button"
-            :disabled="
-              usersPagination.page >=
-              usersPagination.totalPages
-            "
-            @click="
-              loadUsers(
-                usersPagination.page + 1
-              )
-            "
-          >
-            下一页 →
-          </button>
-        </div>
       </section>
 
       <AdminUserGroupEditor
