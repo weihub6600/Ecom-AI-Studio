@@ -18,7 +18,7 @@ const props = defineProps<{
     <div class="preview-device">
       <div class="preview-device-head">
         <span>ZHE AI</span>
-        <i>????</i>
+        <i>消息中心</i>
       </div>
 
       <article>
@@ -28,44 +28,44 @@ const props = defineProps<{
           >
             {{
               props.kind === "warning"
-                ? "????"
+                ? "重要提醒"
                 : props.kind === "success"
-                  ? "???"
-                  : "????"
+                  ? "好消息"
+                  : "站内通知"
             }}
           </i>
 
-          <time>??</time>
+          <time>刚刚</time>
         </header>
 
         <h4>
           {{
             props.title ||
-            "??????????"
+            "消息标题会显示在这里"
           }}
         </h4>
 
         <p>
           {{
             props.content ||
-            "???????????????????????????"
+            "在左侧输入消息正文，这里会实时展示用户看到的最终效果。"
           }}
         </p>
 
         <footer>
           <span></span>
-          ??
+          未读
         </footer>
       </article>
     </div>
 
     <div class="preview-note">
       <span>
-        ??????
+        强提醒已启用
       </span>
 
       <p>
-        ?????????????????????????????????
+        用户在创作工作台会看到消息铃铛红点和浮层提醒，不必先进入用户后台。
       </p>
     </div>
   </aside>
