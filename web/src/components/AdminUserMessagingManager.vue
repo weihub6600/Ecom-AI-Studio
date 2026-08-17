@@ -1148,7 +1148,7 @@ function messageOf(
       v-else-if="tab === 'segments'"
     >
       <AdminAudienceSegmentStrip
-        :groups="targetGroups"
+        :groups="groups"
         :active-group-filter="activeGroupFilter"
         :total-users="usersPagination.total"
         @create="openCreateGroup"
