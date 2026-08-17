@@ -24,6 +24,7 @@ import {
 } from "./admin-user-messaging/presentation";
 import AdminUserGroupEditor from "./admin-user-messaging/AdminUserGroupEditor.vue";
 import AdminMessageDeliveryHistory from "./admin-user-messaging/AdminMessageDeliveryHistory.vue";
+import AdminMessagePreview from "./admin-user-messaging/AdminMessagePreview.vue";
 
 type Tab =
   | "segments"
@@ -1918,65 +1919,12 @@ function messageOf(
           </button>
         </div>
 
-        <aside class="reach-preview">
-          <span class="preview-kicker">
-            LIVE PREVIEW
-          </span>
+        <AdminMessagePreview
+          :kind="messageDraft.kind"
+          :title="messageDraft.title"
+          :content="messageDraft.content"
+        />
 
-          <div class="preview-device">
-            <div class="preview-device-head">
-              <span>ZHE AI</span>
-              <i>消息中心</i>
-            </div>
-
-            <article>
-              <header>
-                <i
-                  :class="
-                    messageDraft.kind
-                  "
-                >
-                  {{
-                    messageDraft.kind ===
-                      'warning'
-                      ? '重要提醒'
-                      : messageDraft.kind ===
-                          'success'
-                        ? '好消息'
-                        : '站内通知'
-                  }}
-                </i>
-                <time>刚刚</time>
-              </header>
-
-              <h4>
-                {{
-                  messageDraft.title ||
-                  '消息标题会显示在这里'
-                }}
-              </h4>
-
-              <p>
-                {{
-                  messageDraft.content ||
-                  '在左侧输入消息正文，这里会实时展示用户看到的最终效果。'
-                }}
-              </p>
-
-              <footer>
-                <span></span>
-                未读
-              </footer>
-            </article>
-          </div>
-
-          <div class="preview-note">
-            <span>强提醒已启用</span>
-            <p>
-              用户在创作工作台会看到消息铃铛红点和浮层提醒，不必先进入用户后台。
-            </p>
-          </div>
-        </aside>
       </section>
 
       <AdminMessageDeliveryHistory
